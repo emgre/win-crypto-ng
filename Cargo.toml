@@ -1,0 +1,16 @@
+[package]
+name = "win-crypto-ng"
+version = "0.1.0"
+authors = ["Émile Grégoire <eg@emilegregoire.ca>"]
+edition = "2018"
+description = "Safe bindings to Windows Cryptography API: Next GenerationDouble Ratchet key management for exchanging encrypted messages between two parties."
+repository = "https://github.com/emgre/win-crypto-ng"
+readme = "README.md"
+keywords = ["cng", "windows", "cryptoapi"]
+categories = ["api-bindings", "os::windows-apis", "cryptography"]
+license = "BSD-3-Clause"
+maintenance = { status = "experimental" }
+
+[dependencies]
+winapi = { version = "0.3", features = ["bcrypt", "ntstatus"] }
+zeroize = "0.10"
