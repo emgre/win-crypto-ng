@@ -1,5 +1,8 @@
 # win-crypto-ng
 
+[![crates.io](https://img.shields.io/crates/v/win-crypto-ng.svg)](https://crates.io/crates/win-crypto-ng)
+[![docs.rs](https://docs.rs/win-crypto-ng/badge.svg)](https://docs.rs/crate/win-crypto-ng)
+
 Safe Rust bindings to Microsoft Windows
 [Cryptography API : Next Generation (CNG)](https://docs.microsoft.com/en-us/windows/win32/seccng/cng-portal)
 

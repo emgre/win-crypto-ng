@@ -1,10 +1,11 @@
 [package]
 name = "win-crypto-ng"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Émile Grégoire <eg@emilegregoire.ca>"]
 edition = "2018"
-description = "Safe bindings to Windows Cryptography API: Next GenerationDouble Ratchet key management for exchanging encrypted messages between two parties."
+description = "Safe bindings to Windows Cryptography API: Next Generation"
 repository = "https://github.com/emgre/win-crypto-ng"
+documentation = "https://docs.rs/crate/win-crypto-ng"
 readme = "README.md"
 keywords = ["cng", "windows", "cryptoapi"]
 categories = ["api-bindings", "os::windows-apis", "cryptography"]
@@ -14,3 +15,6 @@ maintenance = { status = "experimental" }
 [dependencies]
 winapi = { version = "0.3", features = ["bcrypt", "ntstatus"] }
 zeroize = "0.10"
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
