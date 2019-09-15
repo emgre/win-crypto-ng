@@ -20,10 +20,11 @@ Windows, you already accepted to trust these primitives.
 - Thread safe
 
 ## Supported features in Rust
-
 - Symmetric encryption
-  - Supported algorithms: AES, DES, DES-X, RC2, 3DES, 3DES 112.
+  - Supported algorithms: AES, DES, DES-X, RC2, 3DES, 3DES-112.
   - Supported chaining modes: ECB, CBC, CFB.
+- Hash functions
+  - Supported algorithms: SHA-1, SHA-256, SHA-384, SHA-512, SHA-512, MD2, MD4, MD5.
 
 *More to come*
 
@@ -32,25 +33,38 @@ Windows, you already accepted to trust these primitives.
 ### Symmetric encryption
 
 ```rust
-use win_crypto_ng::symmetric::*;
+use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
 
-fn main() {
-    const KEY: &'static str = "0123456789ABCDEF";
-    const IV: &'static str = "asdfqwerasdfqwer";
-    const DATA: &'static str = "This is a test.";
-    
-    let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
-    println!("Valid key sizes: {:?}", algo.valid_key_sizes().unwrap());
-    
-    let key = algo.new_key(KEY.as_bytes()).unwrap();
-    println!("Key size: {}", key.key_size().unwrap());
-    
-    let result = key.encrypt(Some(IV.as_bytes()), DATA.as_bytes()).unwrap();
-    println!("Encrypted data: {:?}", result);
-    
-    let result = key.decrypt(Some(IV.as_bytes()), result.as_slice()).unwrap();
-    println!("Decrypted data: {:?}", std::str::from_utf8(&result.as_slice()[..DATA.len()]).unwrap());
-}
+const KEY: &'static str = "0123456789ABCDEF";
+const IV: &'static str = "asdfqwerasdfqwer";
+const DATA: &'static str = "This is a test.";
+
+let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
+let key = algo.new_key(KEY.as_bytes()).unwrap();
+let ciphertext = key.encrypt(Some(IV.as_bytes()), DATA.as_bytes()).unwrap();
+let plaintext = key.decrypt(Some(IV.as_bytes()), ciphertext.as_slice()).unwrap();
+
+assert_eq!(std::str::from_utf8(&plaintext.as_slice()[..DATA.len()]).unwrap(), DATA);
+```
+
+### Hash functions
+
+```rust
+use win_crypto_ng::hash::{HashAlgorithm, HashAlgorithmId};
+
+const DATA: &'static str = "This is a test.";
+
+let algo = HashAlgorithm::open(HashAlgorithmId::Sha256).unwrap();
+let mut hash = algo.new_hash().unwrap();
+hash.hash(DATA.as_bytes()).unwrap();
+let result = hash.finish().unwrap();
+
+assert_eq!(result.as_slice(), &[
+    0xA8, 0xA2, 0xF6, 0xEB, 0xE2, 0x86, 0x69, 0x7C,
+    0x52, 0x7E, 0xB3, 0x5A, 0x58, 0xB5, 0x53, 0x95,
+    0x32, 0xE9, 0xB3, 0xAE, 0x3B, 0x64, 0xD4, 0xEB,
+    0x0A, 0x46, 0xFB, 0x65, 0x7B, 0x41, 0x56, 0x2C,
+]);
 ```
 
 ## License

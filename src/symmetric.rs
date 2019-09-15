@@ -7,8 +7,8 @@
 //! # Usage
 //!
 //! The first step is to create an instance of the algorithm needed. All the block ciphers
-//! algorithms supported are defined in the [`SymmetricAlgoId`] enum. Since they encrypt per block,
-//! a chaining mode is also needed. All the supported chaining modes are defined in the
+//! algorithms supported are defined in the [`SymmetricAlgorithmId`] enum. Since they encrypt per
+//! block, a chaining mode is also needed. All the supported chaining modes are defined in the
 //! [`ChainingMode`] enum.
 //!
 //! The creation of an algorithm can be relatively time-intensive. Therefore, it is advised to cache
@@ -16,7 +16,7 @@
 //!
 //! Once the algorithm is created, multiple keys can be created. Each key is initialized with a
 //! secret of a specific size. To check what key sizes are supported, see
-//! [`SymmetricAlgo.valid_key_sizes`].
+//! [`SymmetricAlgorithm.valid_key_sizes`].
 //!
 //! With the key in hand, it is then possible to encrypt or decrypt data. Padding is always added
 //! to fit a whole block. If the data fits exactly in a block, an extra block of padding is added.
@@ -38,9 +38,9 @@
 //! assert_eq!(std::str::from_utf8(&plaintext.as_slice()[..DATA.len()]).unwrap(), DATA);
 //! ```
 //!
-//! [`SymmetricAlgoId`]: enum.SymmetricAlgoId.html
+//! [`SymmetricAlgorithmId`]: enum.SymmetricAlgorithmId.html
 //! [`ChainingMode`]: enum.ChainingMode.html
-//! [`SymmetricAlgo.valid_key_sizes`]: struct.SymmetricAlgo.html#method.valid_key_sizes
+//! [`SymmetricAlgorithm.valid_key_sizes`]: struct.SymmetricAlgorithm.html#method.valid_key_sizes
 
 use crate::{Error, Result};
 use crate::buffer::Buffer;

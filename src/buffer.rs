@@ -1,3 +1,5 @@
+//! Secure buffer implementation
+
 use zeroize::Zeroize;
 use std::fmt::{Debug, Error, Formatter};
 
@@ -18,12 +20,22 @@ impl Buffer {
     /// ```
     /// # use win_crypto_ng::buffer::Buffer;
     /// let buf = Buffer::new(76);
-    /// assert_eq!(76, buf.len());
+    /// assert_eq!(buf.len(), 76);
     /// ```
     pub fn new(size: usize) -> Self {
         Buffer { inner: vec![0; size] }
     }
 
+    /// Create a new buffer with its data copied from the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use win_crypto_ng::buffer::Buffer;
+    /// const SOME_DATA: &'static [u8] = &[0x01, 0x02, 0x03, 0x04];
+    /// let buf = Buffer::from(SOME_DATA);
+    /// assert_eq!(buf.as_slice(), SOME_DATA);
+    /// ```
     pub fn from(data: &[u8]) -> Self {
         Buffer { inner: data.to_vec() }
     }

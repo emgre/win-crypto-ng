@@ -116,7 +116,7 @@ impl WindowsString {
     let mut alg_list = MaybeUninit::<*mut BCRYPT_ALGORITHM_IDENTIFIER>::uninit();
     unsafe {
         BCryptEnumAlgorithms(
-            BCRYPT_CIPHER_OPERATION,
+            BCRYPT_HASH_OPERATION,
             alg_count.as_mut_ptr(),
             alg_list.as_mut_ptr(),
             0

@@ -2,10 +2,15 @@ use winapi::shared::ntdef::NTSTATUS;
 use winapi::shared::ntstatus;
 
 pub mod buffer;
+pub mod hash;
 pub mod symmetric;
 
 mod helpers;
 
+/// Error type
+///
+/// These errors are a subset of [`NTSTATUS`](https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55).
+/// Only the values used by CNG are part of this enum.
 #[derive(Clone, Copy, Debug, PartialOrd, PartialEq)]
 pub enum Error {
     NotFound,
