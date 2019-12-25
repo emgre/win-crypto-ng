@@ -2,6 +2,7 @@
 
 use zeroize::Zeroize;
 use std::fmt::{Debug, Error, Formatter};
+use std::mem;
 
 /// Secure buffer implementation.
 ///
@@ -54,6 +55,10 @@ impl Buffer {
 
     pub fn as_slice(&self) -> &[u8] {
         self.inner.as_slice()
+    }
+
+    pub fn into_inner(mut self) -> Vec<u8> {
+        mem::replace(&mut self.inner, Vec::new())
     }
 }
 
