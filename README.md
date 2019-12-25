@@ -31,6 +31,7 @@ Windows, you already accepted to trust these primitives.
   - Supported chaining modes: ECB, CBC, CFB.
 - Hash functions
   - Supported algorithms: SHA-1, SHA-256, SHA-384, SHA-512, SHA-512, MD2, MD4, MD5.
+- Cryptographically secure random number generation
 
 *More to come*
 
