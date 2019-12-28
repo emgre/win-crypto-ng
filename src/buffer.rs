@@ -45,6 +45,10 @@ impl Buffer {
         self.inner.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     pub fn as_ptr(&self) -> *const u8 {
         self.inner.as_ptr()
     }
@@ -55,6 +59,10 @@ impl Buffer {
 
     pub fn as_slice(&self) -> &[u8] {
         self.inner.as_slice()
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.inner.as_mut_slice()
     }
 
     pub fn into_inner(mut self) -> Vec<u8> {
