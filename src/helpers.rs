@@ -1,10 +1,10 @@
 use crate::{Error, Result};
-use winapi::shared::bcrypt::*;
-use winapi::shared::ntdef::{LPCWSTR, PUCHAR, UCHAR, ULONG, VOID};
 use std::ffi::{OsStr, OsString};
 use std::mem::MaybeUninit;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
+use winapi::shared::bcrypt::*;
+use winapi::shared::ntdef::{LPCWSTR, PUCHAR, UCHAR, ULONG, VOID};
 
 pub trait Handle {
     fn as_ptr(&self) -> BCRYPT_HANDLE;
@@ -13,15 +13,13 @@ pub trait Handle {
     fn set_property<T: ?Sized>(&self, property: &str, value: &T) -> Result<()> {
         let property_str = WindowsString::from_str(property);
         unsafe {
-            Error::check(
-                BCryptSetProperty(
-                    self.as_ptr(),
-                    property_str.as_ptr(),
-                    value as *const _ as PUCHAR,
-                    std::mem::size_of_val(value) as ULONG,
-                    0
-                )
-            )
+            Error::check(BCryptSetProperty(
+                self.as_ptr(),
+                property_str.as_ptr(),
+                value as *const _ as PUCHAR,
+                std::mem::size_of_val(value) as ULONG,
+                0,
+            ))
         }
     }
 
@@ -30,16 +28,15 @@ pub trait Handle {
         let mut value = MaybeUninit::<T>::uninit();
         let mut result_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
-            Error::check(
-                BCryptGetProperty(
-                    self.as_ptr(),
-                    property_str.as_ptr(),
-                    value.as_mut_ptr() as *mut UCHAR,
-                    std::mem::size_of::<T>() as ULONG,
-                    result_len.as_mut_ptr(),
-                    0
-                )
-            ).map(|_| value.assume_init())
+            Error::check(BCryptGetProperty(
+                self.as_ptr(),
+                property_str.as_ptr(),
+                value.as_mut_ptr() as *mut UCHAR,
+                std::mem::size_of::<T>() as ULONG,
+                result_len.as_mut_ptr(),
+                0,
+            ))
+            .map(|_| value.assume_init())
         }
     }
 }
@@ -53,13 +50,13 @@ impl AlgoHandle {
         let mut handle = null_mut::<VOID>();
         unsafe {
             let id_str = WindowsString::from_str(id);
-            Error::check(
-                BCryptOpenAlgorithmProvider(
-                    &mut handle,
-                    id_str.as_ptr(),
-                    null(),
-                    0)
-            ).map(|_| Self { handle })
+            Error::check(BCryptOpenAlgorithmProvider(
+                &mut handle,
+                id_str.as_ptr(),
+                null(),
+                0,
+            ))
+            .map(|_| Self { handle })
         }
     }
 }
@@ -67,7 +64,9 @@ impl AlgoHandle {
 impl Drop for AlgoHandle {
     fn drop(&mut self) {
         if !self.handle.is_null() {
-            unsafe { BCryptCloseAlgorithmProvider(self.handle, 0); }
+            unsafe {
+                BCryptCloseAlgorithmProvider(self.handle, 0);
+            }
         }
     }
 }
@@ -86,15 +85,23 @@ pub struct WindowsString {
     inner: Vec<u16>,
 }
 
+#[allow(dead_code)]
 impl WindowsString {
     pub fn from_str(value: &str) -> Self {
-        Self { inner: OsStr::new(value).encode_wide().chain(Some(0).into_iter()).collect() }
+        Self {
+            inner: OsStr::new(value)
+                .encode_wide()
+                .chain(Some(0).into_iter())
+                .collect(),
+        }
     }
 
     pub fn from_ptr(ptr: *const u16) -> Self {
         unsafe {
             let len = (0..).take_while(|&i| *ptr.offset(i) != 0).count();
-            Self { inner: std::slice::from_raw_parts(ptr, len).to_vec() }
+            Self {
+                inner: std::slice::from_raw_parts(ptr, len).to_vec(),
+            }
         }
     }
 
@@ -107,7 +114,10 @@ impl WindowsString {
     }
 
     pub fn to_str(&self) -> String {
-        OsString::from_wide(&self.inner).to_string_lossy().as_ref().to_string()
+        OsString::from_wide(&self.inner)
+            .to_string_lossy()
+            .as_ref()
+            .to_string()
     }
 }
 

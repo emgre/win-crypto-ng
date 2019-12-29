@@ -24,7 +24,9 @@ impl Buffer {
     /// assert_eq!(buf.len(), 76);
     /// ```
     pub fn new(size: usize) -> Self {
-        Buffer { inner: vec![0; size] }
+        Buffer {
+            inner: vec![0; size],
+        }
     }
 
     /// Create a new buffer with its data copied from the slice.
@@ -38,7 +40,9 @@ impl Buffer {
     /// assert_eq!(buf.as_slice(), SOME_DATA);
     /// ```
     pub fn from(data: &[u8]) -> Self {
-        Buffer { inner: data.to_vec() }
+        Buffer {
+            inner: data.to_vec(),
+        }
     }
 
     pub fn len(&self) -> usize {
