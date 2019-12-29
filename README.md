@@ -2,6 +2,9 @@
 
 [![crates.io](https://img.shields.io/crates/v/win-crypto-ng.svg)](https://crates.io/crates/win-crypto-ng)
 [![docs.rs](https://docs.rs/win-crypto-ng/badge.svg)](https://docs.rs/crate/win-crypto-ng)
+![MSRV](https://img.shields.io/badge/rustc-1.37+-blue.svg)
+[![Build status](https://github.com/emgre/win-crypto-ng/workflows/CI/badge.svg)](https://github.com/emgre/win-crypto-ng/actions)
+[![License](https://img.shields.io/github/license/emgre/win-crypto-ng)](https://github.com/emgre/win-crypto-ng/blob/master/LICENSE.md)
 
 Safe Rust bindings to Microsoft Windows
 [Cryptography API : Next Generation (CNG)](https://docs.microsoft.com/en-us/windows/win32/seccng/cng-portal)

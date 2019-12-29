@@ -1,14 +1,21 @@
-name: Rust
-on: [push]
+name: CI
+on: push
 jobs:
-  check:
-    runs-on: [windows-latest]
+  ci:
+    runs-on: windows-latest
     strategy:
       matrix:
         rust:
-          - 1.34.0  # MSRV
+          - 1.37.0  # MSRV
           - stable
           - beta
+          - nightly
+        features:
+          - ""
+          - "zeroize"
+        exclude: # Zeroize 1.1 supports Rust 1.39+
+          - rust: 1.37.0
+            features: "zeroize"
     steps:
     - uses: actions/checkout@v1
     - uses: actions-rs/toolchain@v1
@@ -19,10 +26,12 @@ jobs:
         components: rustfmt, clippy
     - uses: actions-rs/cargo@v1
       with:
-        command: check
+        command: build
+        args: --no-default-features --features "${{ matrix.features }}"
     - uses: actions-rs/cargo@v1
       with:
         command: test
+        args: --no-default-features --features "${{ matrix.features }}"
     - uses: actions-rs/cargo@v1
       with:
         command: fmt
@@ -30,4 +39,4 @@ jobs:
     - uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: -- -D warnings
+        args: --no-default-features --features "${{ matrix.features }}" -- -D warnings

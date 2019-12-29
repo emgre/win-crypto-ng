@@ -42,13 +42,13 @@
 //! [`ChainingMode`]: enum.ChainingMode.html
 //! [`SymmetricAlgorithm.valid_key_sizes`]: struct.SymmetricAlgorithm.html#method.valid_key_sizes
 
-use crate::{Error, Result};
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
-use winapi::shared::bcrypt::*;
-use winapi::shared::minwindef::{DWORD, ULONG, PUCHAR};
+use crate::{Error, Result};
 use std::mem::MaybeUninit;
 use std::ptr::null_mut;
+use winapi::shared::bcrypt::*;
+use winapi::shared::minwindef::{DWORD, PUCHAR, ULONG};
 
 /// Symmetric algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
@@ -168,7 +168,10 @@ impl SymmetricAlgorithm {
         let chaining_mode_str = WindowsString::from_str(chaining_mode.to_str());
         handle.set_property(BCRYPT_CHAINING_MODE, chaining_mode_str.as_slice())?;
 
-        Ok(Self { handle, chaining_mode })
+        Ok(Self {
+            handle,
+            chaining_mode,
+        })
     }
 
     /// Returns the chaining mode of the algorithm.
@@ -200,10 +203,16 @@ impl SymmetricAlgorithm {
     /// assert_eq!([128, 192, 256], valid_key_sizes.as_slice());
     /// ```
     pub fn valid_key_sizes(&self) -> Result<Vec<usize>> {
-        let key_sizes_struct = self.handle.get_property::<BCRYPT_KEY_LENGTHS_STRUCT>(BCRYPT_KEY_LENGTHS)?;
+        let key_sizes_struct = self
+            .handle
+            .get_property::<BCRYPT_KEY_LENGTHS_STRUCT>(BCRYPT_KEY_LENGTHS)?;
 
         if key_sizes_struct.dwIncrement != 0 {
-            Ok((key_sizes_struct.dwMinLength as usize ..= key_sizes_struct.dwMaxLength as usize).step_by(key_sizes_struct.dwIncrement as usize).collect())
+            Ok(
+                (key_sizes_struct.dwMinLength as usize..=key_sizes_struct.dwMaxLength as usize)
+                    .step_by(key_sizes_struct.dwIncrement as usize)
+                    .collect(),
+            )
         } else {
             Ok(vec![key_sizes_struct.dwMinLength as usize])
         }
@@ -222,17 +231,19 @@ impl SymmetricAlgorithm {
         let mut key_handle = KeyHandle::new();
         let mut object = Buffer::new(object_size);
         unsafe {
-            Error::check(
-                BCryptGenerateSymmetricKey(
-                    self.handle.as_ptr(),
-                    key_handle.as_mut_ptr(),
-                    object.as_mut_ptr(),
-                    object.len() as ULONG,
-                    secret.as_ptr() as PUCHAR,
-                    secret.len() as ULONG,
-                    0
-                )
-            ).map(|_| SymmetricAlgorithmKey { handle: key_handle, _object: object })
+            Error::check(BCryptGenerateSymmetricKey(
+                self.handle.as_ptr(),
+                key_handle.as_mut_ptr(),
+                object.as_mut_ptr(),
+                object.len() as ULONG,
+                secret.as_ptr() as PUCHAR,
+                secret.len() as ULONG,
+                0,
+            ))
+            .map(|_| SymmetricAlgorithmKey {
+                handle: key_handle,
+                _object: object,
+            })
         }
     }
 }
@@ -250,7 +261,9 @@ impl KeyHandle {
 impl Drop for KeyHandle {
     fn drop(&mut self) {
         if !self.handle.is_null() {
-            unsafe { BCryptDestroyKey(self.handle); }
+            unsafe {
+                BCryptDestroyKey(self.handle);
+            }
         }
     }
 }
@@ -285,7 +298,9 @@ impl SymmetricAlgorithmKey {
     /// assert_eq!(128, key_size);
     /// ```
     pub fn key_size(&self) -> Result<usize> {
-        self.handle.get_property::<DWORD>(BCRYPT_KEY_LENGTH).map(|key_size| key_size as usize)
+        self.handle
+            .get_property::<DWORD>(BCRYPT_KEY_LENGTH)
+            .map(|key_size| key_size as usize)
     }
 
     /// Returns the block size in bytes.
@@ -303,7 +318,9 @@ impl SymmetricAlgorithmKey {
     /// assert_eq!(16, key_size);
     /// ```
     pub fn block_size(&self) -> Result<usize> {
-        self.handle.get_property::<DWORD>(BCRYPT_BLOCK_LENGTH).map(|block_size| block_size as usize)
+        self.handle
+            .get_property::<DWORD>(BCRYPT_BLOCK_LENGTH)
+            .map(|block_size| block_size as usize)
     }
 
     /// Encrypts data using the symmetric key
@@ -341,38 +358,34 @@ impl SymmetricAlgorithmKey {
 
         let mut encrypted_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
-            Error::check(
-                BCryptEncrypt(
-                    self.handle.as_ptr(),
-                    data.as_ptr() as PUCHAR,
-                    data.len() as ULONG,
-                    null_mut(),
-                    iv_ptr,
-                    iv_len,
-                    null_mut(),
-                    0,
-                    encrypted_len.as_mut_ptr(),
-                    BCRYPT_BLOCK_PADDING
-                )
-            )?;
+            Error::check(BCryptEncrypt(
+                self.handle.as_ptr(),
+                data.as_ptr() as PUCHAR,
+                data.len() as ULONG,
+                null_mut(),
+                iv_ptr,
+                iv_len,
+                null_mut(),
+                0,
+                encrypted_len.as_mut_ptr(),
+                BCRYPT_BLOCK_PADDING,
+            ))?;
 
             let mut output = Buffer::new(encrypted_len.assume_init() as usize);
 
-            Error::check(
-                BCryptEncrypt(
-                    self.handle.as_ptr(),
-                    data.as_ptr() as PUCHAR,
-                    data.len() as ULONG,
-                    null_mut(),
-                    iv_ptr,
-                    iv_len,
-                    output.as_mut_ptr(),
-                    output.len() as ULONG,
-                    encrypted_len.as_mut_ptr(),
-                    BCRYPT_BLOCK_PADDING
-                )
-            ).map(|_| output)
-
+            Error::check(BCryptEncrypt(
+                self.handle.as_ptr(),
+                data.as_ptr() as PUCHAR,
+                data.len() as ULONG,
+                null_mut(),
+                iv_ptr,
+                iv_len,
+                output.as_mut_ptr(),
+                output.len() as ULONG,
+                encrypted_len.as_mut_ptr(),
+                BCRYPT_BLOCK_PADDING,
+            ))
+            .map(|_| output)
         }
     }
 
@@ -408,38 +421,34 @@ impl SymmetricAlgorithmKey {
 
         let mut plaintext_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
-            Error::check(
-                BCryptDecrypt(
-                    self.handle.as_ptr(),
-                    data.as_ptr() as PUCHAR,
-                    data.len() as ULONG,
-                    null_mut(),
-                    iv_ptr,
-                    iv_len,
-                    null_mut(),
-                    0,
-                    plaintext_len.as_mut_ptr(),
-                    BCRYPT_BLOCK_PADDING
-                )
-            )?;
+            Error::check(BCryptDecrypt(
+                self.handle.as_ptr(),
+                data.as_ptr() as PUCHAR,
+                data.len() as ULONG,
+                null_mut(),
+                iv_ptr,
+                iv_len,
+                null_mut(),
+                0,
+                plaintext_len.as_mut_ptr(),
+                BCRYPT_BLOCK_PADDING,
+            ))?;
 
             let mut output = Buffer::new(plaintext_len.assume_init() as usize);
 
-            Error::check(
-                BCryptDecrypt(
-                    self.handle.as_ptr(),
-                    data.as_ptr() as PUCHAR,
-                    data.len() as ULONG,
-                    null_mut(),
-                    iv_ptr,
-                    iv_len,
-                    output.as_mut_ptr(),
-                    output.len() as ULONG,
-                    plaintext_len.as_mut_ptr(),
-                    BCRYPT_BLOCK_PADDING
-                )
-            ).map(|_| output)
-
+            Error::check(BCryptDecrypt(
+                self.handle.as_ptr(),
+                data.as_ptr() as PUCHAR,
+                data.len() as ULONG,
+                null_mut(),
+                iv_ptr,
+                iv_len,
+                output.as_mut_ptr(),
+                output.len() as ULONG,
+                plaintext_len.as_mut_ptr(),
+                BCRYPT_BLOCK_PADDING,
+            ))
+            .map(|_| output)
         }
     }
 }
@@ -498,13 +507,45 @@ mod tests {
         check_common_chaining_modes(SymmetricAlgorithmId::TripleDes112, 16, 8);
     }
 
-    fn check_common_chaining_modes(algo_id: SymmetricAlgorithmId, key_size: usize, block_size: usize) {
-        check_encryption_decryption(algo_id, ChainingMode::Ecb, &SECRET.as_bytes()[..key_size], None, &DATA.as_bytes()[..block_size], block_size);
-        check_encryption_decryption(algo_id, ChainingMode::Cbc, &SECRET.as_bytes()[..key_size], Some(&IV.as_bytes()[..block_size]), &DATA.as_bytes(), block_size);
-        check_encryption_decryption(algo_id, ChainingMode::Cfb, &SECRET.as_bytes()[..key_size], Some(&IV.as_bytes()[..block_size]), &DATA.as_bytes(), block_size);
+    fn check_common_chaining_modes(
+        algo_id: SymmetricAlgorithmId,
+        key_size: usize,
+        block_size: usize,
+    ) {
+        check_encryption_decryption(
+            algo_id,
+            ChainingMode::Ecb,
+            &SECRET.as_bytes()[..key_size],
+            None,
+            &DATA.as_bytes()[..block_size],
+            block_size,
+        );
+        check_encryption_decryption(
+            algo_id,
+            ChainingMode::Cbc,
+            &SECRET.as_bytes()[..key_size],
+            Some(&IV.as_bytes()[..block_size]),
+            &DATA.as_bytes(),
+            block_size,
+        );
+        check_encryption_decryption(
+            algo_id,
+            ChainingMode::Cfb,
+            &SECRET.as_bytes()[..key_size],
+            Some(&IV.as_bytes()[..block_size]),
+            &DATA.as_bytes(),
+            block_size,
+        );
     }
 
-    fn check_encryption_decryption(algo_id: SymmetricAlgorithmId, chaining_mode: ChainingMode, secret: &[u8], iv: Option<&[u8]>, data: &[u8], expected_block_size: usize) {
+    fn check_encryption_decryption(
+        algo_id: SymmetricAlgorithmId,
+        chaining_mode: ChainingMode,
+        secret: &[u8],
+        iv: Option<&[u8]>,
+        data: &[u8],
+        expected_block_size: usize,
+    ) {
         let algo = SymmetricAlgorithm::open(algo_id, chaining_mode).unwrap();
         let key = algo.new_key(secret).unwrap();
         let ciphertext = key.encrypt(iv, data).unwrap();
