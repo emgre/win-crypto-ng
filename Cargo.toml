@@ -10,11 +10,16 @@ readme = "README.md"
 keywords = ["cng", "windows", "cryptoapi"]
 categories = ["api-bindings", "os::windows-apis", "cryptography"]
 license = "BSD-3-Clause"
+
+[badges]
 maintenance = { status = "experimental" }
 
 [dependencies]
 winapi = { version = "0.3", features = ["bcrypt", "ntstatus"] }
-zeroize = "0.10"
+zeroize = { version = "1.1", optional = true }
+
+[features]
+default = ["zeroize"]
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"

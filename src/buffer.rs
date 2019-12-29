@@ -1,12 +1,13 @@
 //! Secure buffer implementation
 
-use zeroize::Zeroize;
 use std::fmt::{Debug, Error, Formatter};
+use std::mem;
 
 /// Secure buffer implementation.
 ///
-/// On creation, the buffer is initialized with zeroes and on destruction,
-/// its content is **always** set to `0` before being released.
+/// On creation, the buffer is initialized with zeroes.
+/// On destruction, if the `zeroize` feature is enabled, its content is set to
+/// `0` before being released.
 #[derive(PartialOrd, PartialEq)]
 pub struct Buffer {
     inner: Vec<u8>,
@@ -44,6 +45,10 @@ impl Buffer {
         self.inner.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     pub fn as_ptr(&self) -> *const u8 {
         self.inner.as_ptr()
     }
@@ -55,11 +60,20 @@ impl Buffer {
     pub fn as_slice(&self) -> &[u8] {
         self.inner.as_slice()
     }
+
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.inner.as_mut_slice()
+    }
+
+    pub fn into_inner(mut self) -> Vec<u8> {
+        mem::replace(&mut self.inner, Vec::new())
+    }
 }
 
 impl Drop for Buffer {
     fn drop(&mut self) {
-        self.inner.zeroize();
+        #[cfg(feature = "zeroize")]
+        zeroize::Zeroize::zeroize(&mut self.inner);
     }
 }
 
