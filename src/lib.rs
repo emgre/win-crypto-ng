@@ -41,7 +41,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl Error {
-    fn check(status: NTSTATUS) -> std::result::Result<(), Self> {
+    fn check(status: NTSTATUS) -> Result<()> {
         match status {
             ntstatus::STATUS_SUCCESS => Ok(()),
             ntstatus::STATUS_NOT_FOUND => Err(Error::NotFound),
