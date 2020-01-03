@@ -46,9 +46,10 @@
 
 use crate::{Error, Result};
 use crate::buffer::Buffer;
-use crate::helpers::{AlgoHandle, Handle};
+use crate::helpers::{AlgoHandle, Handle, Tailed};
 use winapi::shared::bcrypt::*;
 use winapi::shared::minwindef::{DWORD, ULONG, PUCHAR};
+use std::marker::PhantomData;
 use std::ptr::null_mut;
 
 /// Hashing algorithm identifiers
@@ -153,6 +154,81 @@ impl HashAlgorithm {
                 )
             ).map(|_| Hash { handle: hash_handle, _object: object })
         }
+    }
+}
+
+/// List of hashing object identifiers (OIDs).
+///
+/// This is a wrapper for the underlying buffer containing the list. Since it
+/// can be potentially self-referencing, it's currently not possible to clone
+/// this structure. If you wish to clone the OIDs around, please collect them
+/// into another container (e.g. `Vec`) instead.
+pub struct OidList(Box<Tailed<BCRYPT_OID_LIST>>);
+
+impl OidList {
+    /// Returns an iterator over DER-encoded hashing object identifiers (OIDs).
+    pub fn iter(&self) -> impl Iterator<Item = &[u8]> {
+        let mut iter = self.as_slice().iter();
+        std::iter::from_fn(move || iter.next().map(Oid::as_bytes))
+    }
+
+    fn as_slice<'a>(&'a self) -> &'a [Oid<'a>] {
+        unsafe {
+            std::slice::from_raw_parts(self.0.pOIDs as *const Oid, self.0.dwOIDCount as usize)
+        }
+    }
+}
+
+#[repr(transparent)]
+struct Oid<'a>(BCRYPT_OID, PhantomData<&'a ()>);
+
+impl<'a> Oid<'a> {
+    fn as_bytes(&'a self) -> &'a [u8] {
+        unsafe { std::slice::from_raw_parts(self.0.pbOID, self.0.cbOID as usize) }
+    }
+}
+
+impl HashAlgorithm {
+    /// Returns a list of hashing object identifiers (OIDs) that have been
+    /// encoded by using ASN.1 Distinguished Encoding Rules (DER) encoding.
+    ///
+    /// The first OID is used to identify any hashes or signatures created by
+    /// this algorithm provider. When verifying a hash or signature, all the
+    /// OIDs in the array are treated as valid.
+    ///
+    /// In the Microsoft Primitive Provider implementation, the OID count is
+    /// always 2.
+    /// * First one contains a DER-encoded `AlgorithmIdentifier` with a `NULL`
+    ///   parameter.
+    /// * Second one contains the DER-encoded `AlgorithmIdentifier` without
+    ///   a `NULL` parameter.
+    ///
+    /// The following snippet describes an AlgorithmIdentifier in Abstract
+    /// Syntax Notation One (ASN.1) notation. `SEQUENCE`, `OBJECT IDENTIFIER`,
+    /// and `ANY` are DER-encoded. The `ANY` BLOB is `NULL`.
+    /// ```norust
+    /// AlgorithmIdentifier ::= SEQUENCE {
+    ///     algorithm            OBJECT IDENTIFIER,
+    ///     algorithmParams      ANY
+    /// }
+    /// ```
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use win_crypto_ng::hash::{HashAlgorithm, HashAlgorithmId};
+    /// let algo = HashAlgorithm::open(HashAlgorithmId::Sha1).unwrap();
+    /// let oids = algo.oids().unwrap();
+    /// let oids: Vec<&[u8]> = oids.iter().collect();
+    ///
+    /// assert_eq!(oids[0], &[0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00]);
+    /// assert_eq!(oids[1], &[0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a]);
+    /// assert_eq!(oids.len(), 2);
+    /// ```
+    pub fn oids(&self) -> Result<OidList> {
+        let (buf, _) = self.handle.get_property_unsized(BCRYPT_HASH_OID_LIST)?;
+
+        Ok(OidList(buf))
     }
 }
 
