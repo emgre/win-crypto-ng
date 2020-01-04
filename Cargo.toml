@@ -17,6 +17,10 @@ maintenance = { status = "experimental" }
 [dependencies]
 winapi = { version = "0.3", features = ["bcrypt", "ntstatus"] }
 zeroize = { version = "1.1", optional = true }
+doc-comment = "0.3"
+
+[dev-dependencies]
+doc-comment = "0.3"
 
 [features]
 default = ["zeroize"]
