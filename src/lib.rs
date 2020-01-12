@@ -7,6 +7,7 @@ use std::fmt;
 pub mod asymmetric;
 pub mod buffer;
 pub mod hash;
+pub mod key;
 pub mod property;
 pub mod random;
 pub mod symmetric;
