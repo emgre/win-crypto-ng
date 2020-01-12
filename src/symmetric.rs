@@ -44,6 +44,7 @@
 
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
+use crate::key::KeyHandle;
 use crate::property::{self, BlockLength, KeyLength, KeyLengths, ObjectLength};
 use crate::{Error, Result};
 use std::mem::MaybeUninit;
@@ -245,36 +246,6 @@ impl SymmetricAlgorithm {
                 _object: object,
             })
         }
-    }
-}
-
-struct KeyHandle {
-    handle: BCRYPT_KEY_HANDLE,
-}
-
-impl KeyHandle {
-    pub fn new() -> Self {
-        Self { handle: null_mut() }
-    }
-}
-
-impl Drop for KeyHandle {
-    fn drop(&mut self) {
-        if !self.handle.is_null() {
-            unsafe {
-                BCryptDestroyKey(self.handle);
-            }
-        }
-    }
-}
-
-impl Handle for KeyHandle {
-    fn as_ptr(&self) -> BCRYPT_KEY_HANDLE {
-        self.handle
-    }
-
-    fn as_mut_ptr(&mut self) -> *mut BCRYPT_KEY_HANDLE {
-        &mut self.handle
     }
 }
 
