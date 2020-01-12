@@ -4,6 +4,7 @@ use winapi::shared::ntstatus;
 
 use std::fmt;
 
+pub mod asymmetric;
 pub mod buffer;
 pub mod hash;
 pub mod key;
