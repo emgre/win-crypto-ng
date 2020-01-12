@@ -108,18 +108,9 @@ impl RandomNumberGenerator {
     /// Open a random number generator using the system preferred algorithm.
     ///
     /// **Windows Vista**: This is not supported.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use win_crypto_ng::random::{RandomAlgorithmId, RandomNumberGenerator};
-    /// let rng = RandomNumberGenerator::system_preferred();
-    ///
-    /// assert!(rng.is_ok());
-    /// ```
-    pub fn system_preferred() -> crate::Result<RandomNumberGenerator> {
-        let handle = RandomAlgoHandle::system_preferred();
-        Ok(Self { handle })
+    pub fn system_preferred() -> RandomNumberGenerator {
+        let handle = RandomAlgoHandle::SystemPreferred;
+        Self { handle }
     }
 
     /// Fills a buffer with random bytes.
@@ -131,7 +122,7 @@ impl RandomNumberGenerator {
     /// ```
     /// # use win_crypto_ng::random::{RandomAlgorithmId, RandomNumberGenerator};
     /// let mut buffer = [0u8; 32];
-    /// let rng = RandomNumberGenerator::system_preferred().unwrap();
+    /// let rng = RandomNumberGenerator::system_preferred();
     /// rng.gen_random(&mut buffer);
     ///
     /// assert_ne!(&buffer, &[0u8; 32]);
@@ -153,7 +144,7 @@ impl RandomNumberGenerator {
     /// ```
     /// # use win_crypto_ng::random::{RandomAlgorithmId, RandomNumberGenerator};
     /// let mut buffer = [0u8; 32];
-    /// let rng = RandomNumberGenerator::system_preferred().unwrap();
+    /// let rng = RandomNumberGenerator::system_preferred();
     /// rng.gen_random_with_entropy_in_buffer(&mut buffer);
     ///
     /// assert_ne!(&buffer, &[0u8; 32]);
@@ -185,10 +176,6 @@ enum RandomAlgoHandle {
 impl RandomAlgoHandle {
     pub fn open(id: RandomAlgorithmId) -> crate::Result<Self> {
         Ok(Self::Specified(AlgoHandle::open(id.into())?))
-    }
-
-    pub fn system_preferred() -> RandomAlgoHandle {
-        Self::SystemPreferred
     }
 
     pub fn handle(&self) -> BCRYPT_ALG_HANDLE {
@@ -226,7 +213,7 @@ mod tests {
 
     #[test]
     fn system_preferred() {
-        let rng = RandomNumberGenerator::system_preferred().unwrap();
+        let rng = RandomNumberGenerator::system_preferred();
         test_rng(rng);
     }
 
