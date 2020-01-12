@@ -174,18 +174,18 @@ enum RandomAlgoHandle {
 }
 
 impl RandomAlgoHandle {
-    pub fn open(id: RandomAlgorithmId) -> crate::Result<Self> {
+    fn open(id: RandomAlgorithmId) -> crate::Result<Self> {
         Ok(Self::Specified(AlgoHandle::open(id.into())?))
     }
 
-    pub fn handle(&self) -> BCRYPT_ALG_HANDLE {
+    fn handle(&self) -> BCRYPT_ALG_HANDLE {
         match self {
             Self::SystemPreferred => ptr::null_mut(),
             Self::Specified(handle) => handle.as_ptr(),
         }
     }
 
-    pub fn flags(&self) -> ULONG {
+    fn flags(&self) -> ULONG {
         match self {
             Self::SystemPreferred => BCRYPT_USE_SYSTEM_PREFERRED_RNG,
             Self::Specified(_) => 0,
