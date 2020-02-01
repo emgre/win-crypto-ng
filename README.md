@@ -30,7 +30,7 @@ Windows, you already accepted to trust these primitives.
   - Supported algorithms: AES, DES, DES-X, RC2, 3DES, 3DES-112.
   - Supported chaining modes: ECB, CBC, CFB.
 - Hash functions
-  - Supported algorithms: SHA-1, SHA-256, SHA-384, SHA-512, SHA-512, MD2, MD4, MD5.
+  - Supported algorithms: SHA-1, SHA-256, SHA-384, SHA-512, MD2, MD4, MD5.
 - Cryptographically secure random number generation
 
 *More to come*
