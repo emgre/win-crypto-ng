@@ -1,14 +1,35 @@
 //! Cryptographically secure random number generation
-
-use core::convert::TryFrom;
-use core::fmt;
-use core::ptr;
-
-use winapi::shared::bcrypt::*;
-use winapi::shared::ntdef::ULONG;
+//!
+//! # Usage
+//!
+//! To generate cryptographically secure random numbers, start by opening a
+//! [`RandomNumberGenerator`]. This can be done either via the [`open`] method
+//! where you specify the random algorithm to use or with the [`system_preferred`]
+//! method, where the system default is used. Then, to fill a buffer with random
+//! numbers, call the [`gen_random`] method.
+//!
+//! ```
+//! use win_crypto_ng::random::{RandomAlgorithmId, RandomNumberGenerator};
+//!
+//! let mut buffer = [0u8; 32];
+//! let rng = RandomNumberGenerator::open(RandomAlgorithmId::Rng).unwrap();
+//! rng.gen_random(&mut buffer).unwrap();
+//!
+//! assert_ne!(&buffer, &[0u8; 32]);
+//! ```
+//!
+//! [`RandomNumberGenerator`]: struct.RandomNumberGenerator.html
+//! [`open`]: struct.RandomNumberGenerator.html#method.open
+//! [`system_preferred`]: struct.RandomNumberGenerator.html#method.system_preferred
+//! [`gen_random`]: struct.RandomNumberGenerator.html#method.gen_random
 
 use crate::helpers::{AlgoHandle, Handle};
 use crate::Error;
+use core::convert::TryFrom;
+use core::fmt;
+use core::ptr;
+use winapi::shared::bcrypt::*;
+use winapi::shared::ntdef::ULONG;
 
 /// Random number generation algorithms identifiers
 #[derive(Clone, Copy, PartialOrd, PartialEq)]
@@ -123,7 +144,7 @@ impl RandomNumberGenerator {
     /// # use win_crypto_ng::random::{RandomAlgorithmId, RandomNumberGenerator};
     /// let mut buffer = [0u8; 32];
     /// let rng = RandomNumberGenerator::system_preferred();
-    /// rng.gen_random(&mut buffer);
+    /// rng.gen_random(&mut buffer).unwrap();
     ///
     /// assert_ne!(&buffer, &[0u8; 32]);
     /// ```
@@ -145,7 +166,7 @@ impl RandomNumberGenerator {
     /// # use win_crypto_ng::random::{RandomAlgorithmId, RandomNumberGenerator};
     /// let mut buffer = [0u8; 32];
     /// let rng = RandomNumberGenerator::system_preferred();
-    /// rng.gen_random_with_entropy_in_buffer(&mut buffer);
+    /// rng.gen_random_with_entropy_in_buffer(&mut buffer).unwrap();
     ///
     /// assert_ne!(&buffer, &[0u8; 32]);
     /// ```

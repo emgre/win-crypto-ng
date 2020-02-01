@@ -74,8 +74,20 @@ assert_eq!(result.as_slice(), &[
 ]);
 ```
 
+### Cryptographically secure random number generator
+
+```rust
+use win_crypto_ng::random::{RandomAlgorithmId, RandomNumberGenerator};
+
+let mut buffer = [0u8; 32];
+let rng = RandomNumberGenerator::system_preferred();
+rng.gen_random(&mut buffer).unwrap();
+
+assert_ne!(&buffer, &[0u8; 32]);
+```
+
 ## License
 
 Licensed under the 3-Clause BSD License. See [LICENSE.md](LICENSE.md) for more details.
 
-Copyright (c) 2019 Émile Grégoire. All rights reserved.
+Copyright (c) 2019-2020 Émile Grégoire. All rights reserved.
