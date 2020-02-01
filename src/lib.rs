@@ -4,6 +4,7 @@ use winapi::shared::ntstatus;
 
 pub mod buffer;
 pub mod hash;
+pub mod random;
 pub mod symmetric;
 
 mod helpers;
