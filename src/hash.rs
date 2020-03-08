@@ -152,7 +152,7 @@ impl HashAlgorithm {
             ))
             .map(|_| Hash {
                 handle: hash_handle,
-                _object: object,
+                object,
             })
         }
     }
@@ -191,7 +191,8 @@ impl Handle for HashHandle {
 /// Hashing operation
 pub struct Hash {
     handle: HashHandle,
-    _object: Buffer,
+    /// Backing allocation for the hash object
+    object: Buffer,
 }
 
 impl Hash {
@@ -272,6 +273,30 @@ impl Hash {
         self.handle
             .get_property::<DWORD>(BCRYPT_HASH_LENGTH)
             .map(|hash_size| hash_size as usize)
+    }
+}
+
+impl Clone for Hash {
+    fn clone(&self) -> Self {
+        // Rely on the fact that the existing buffer was already created with
+        // size of `BCRYPT_OBJECT_LENGTH` as required by `BCryptDuplicateHash`.
+        let object_size = self.object.len();
+
+        let mut handle = HashHandle::new();
+        let mut object = Buffer::new(object_size);
+
+        Error::check(unsafe {
+            BCryptDuplicateHash(
+                self.handle.as_ptr(),
+                handle.as_mut_ptr(),
+                object.as_mut_ptr(),
+                object.len() as ULONG,
+                0,
+            )
+        })
+        .expect("to always be able to duplicate a valid hash object");
+
+        Self { handle, object }
     }
 }
 
@@ -380,5 +405,24 @@ mod tests {
 
         assert_eq!(hash_size, expected_hash.len());
         assert_eq!(result.as_slice(), expected_hash);
+
+        check_clone_impl(algo_id);
+    }
+
+    fn check_clone_impl(algo_id: HashAlgorithmId) {
+        let algo = HashAlgorithm::open(algo_id).unwrap();
+        let mut hash1 = algo.new_hash().unwrap();
+        hash1.hash(DATA.as_bytes()).unwrap();
+
+        let mut hash2 = hash1.clone();
+        assert_ne!(hash1.handle.as_ptr(), hash2.handle.as_ptr());
+
+        const AUX_DATA: &[u8] = &[0xE8, 0x91, 0xD9, 0x12];
+        hash1.hash(AUX_DATA).unwrap();
+        hash2.hash(AUX_DATA).unwrap();
+
+        let result1 = hash1.finish().unwrap();
+        let result2 = hash2.finish().unwrap();
+        assert_eq!(result1, result2);
     }
 }
