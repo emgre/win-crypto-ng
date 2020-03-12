@@ -93,13 +93,13 @@ impl SymmetricAlgorithmId {
     fn to_str(&self) -> &str {
         match self {
             Self::Aes => BCRYPT_AES_ALGORITHM,
-            Self::Des => BCRYPT_DES_ALGORITHM,
-            Self::DesX => BCRYPT_DESX_ALGORITHM,
-            Self::Rc2 => BCRYPT_RC2_ALGORITHM,
-            //Self::Rc4 => BCRYPT_RC4_ALGORITHM,
-            Self::TripleDes => BCRYPT_3DES_ALGORITHM,
-            Self::TripleDes112 => BCRYPT_3DES_112_ALGORITHM,
-            //Self::XtsAes => BCRYPT_XTS_AES_ALGORITHM,
+            SymmetricAlgorithmId::Des => BCRYPT_DES_ALGORITHM,
+            SymmetricAlgorithmId::DesX => BCRYPT_DESX_ALGORITHM,
+            SymmetricAlgorithmId::Rc2 => BCRYPT_RC2_ALGORITHM,
+            //SymmetricAlgorithmId::Rc4 => BCRYPT_RC4_ALGORITHM,
+            SymmetricAlgorithmId::TripleDes => BCRYPT_3DES_ALGORITHM,
+            SymmetricAlgorithmId::TripleDes112 => BCRYPT_3DES_112_ALGORITHM,
+            //SymmetricAlgorithmId::XtsAes => BCRYPT_XTS_AES_ALGORITHM,
         }
     }
 }
@@ -136,11 +136,11 @@ pub enum ChainingMode {
 impl ChainingMode {
     fn to_str(&self) -> &str {
         match self {
-            Self::Ecb => BCRYPT_CHAIN_MODE_ECB,
-            Self::Cbc => BCRYPT_CHAIN_MODE_CBC,
-            Self::Cfb => BCRYPT_CHAIN_MODE_CFB,
-            //Self::Ccm => BCRYPT_CHAIN_MODE_CCM,
-            //Self::Gcm => BCRYPT_CHAIN_MODE_GCM,
+            ChainingMode::Ecb => BCRYPT_CHAIN_MODE_ECB,
+            ChainingMode::Cbc => BCRYPT_CHAIN_MODE_CBC,
+            ChainingMode::Cfb => BCRYPT_CHAIN_MODE_CFB,
+            //ChainingMode::Ccm => BCRYPT_CHAIN_MODE_CCM,
+            //ChainingMode::Gcm => BCRYPT_CHAIN_MODE_GCM,
         }
     }
 }

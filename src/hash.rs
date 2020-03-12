@@ -99,15 +99,15 @@ pub enum HashAlgorithmId {
 impl HashAlgorithmId {
     fn to_str(&self) -> &str {
         match self {
-            Self::Sha1 => BCRYPT_SHA1_ALGORITHM,
-            Self::Sha256 => BCRYPT_SHA256_ALGORITHM,
-            Self::Sha384 => BCRYPT_SHA384_ALGORITHM,
-            Self::Sha512 => BCRYPT_SHA512_ALGORITHM,
-            Self::Md2 => BCRYPT_MD2_ALGORITHM,
-            Self::Md4 => BCRYPT_MD4_ALGORITHM,
-            Self::Md5 => BCRYPT_MD5_ALGORITHM,
-            //Self::AesCmac => BCRYPT_AES_CMAC_ALGORITHM,
-            //Self::AesGmac => BCRYPT_AES_GMAC_ALGORITHM,
+            HashAlgorithmId::Sha1 => BCRYPT_SHA1_ALGORITHM,
+            HashAlgorithmId::Sha256 => BCRYPT_SHA256_ALGORITHM,
+            HashAlgorithmId::Sha384 => BCRYPT_SHA384_ALGORITHM,
+            HashAlgorithmId::Sha512 => BCRYPT_SHA512_ALGORITHM,
+            HashAlgorithmId::Md2 => BCRYPT_MD2_ALGORITHM,
+            HashAlgorithmId::Md4 => BCRYPT_MD4_ALGORITHM,
+            HashAlgorithmId::Md5 => BCRYPT_MD5_ALGORITHM,
+            //HashAlgorithmId::AesCmac => BCRYPT_AES_CMAC_ALGORITHM,
+            //HashAlgorithmId::AesGmac => BCRYPT_AES_GMAC_ALGORITHM,
         }
     }
 }
