@@ -6,7 +6,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - 1.37.0  # MSRV
+          - 1.34.0  # MSRV (latest Debian stable)
           - stable
           - beta
           - nightly
@@ -14,7 +14,7 @@ jobs:
           - ""
           - "zeroize"
         exclude: # Zeroize 1.1 supports Rust 1.39+
-          - rust: 1.37.0
+          - rust: 1.34.0
             features: "zeroize"
     steps:
     - uses: actions/checkout@v1
