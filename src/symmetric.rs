@@ -45,7 +45,6 @@
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
 use crate::{Error, Result};
-use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
 use winapi::shared::minwindef::{DWORD, PUCHAR, ULONG};
@@ -92,7 +91,7 @@ pub enum SymmetricAlgorithmId {
 impl SymmetricAlgorithmId {
     fn to_str(&self) -> &str {
         match self {
-            Self::Aes => BCRYPT_AES_ALGORITHM,
+            SymmetricAlgorithmId::Aes => BCRYPT_AES_ALGORITHM,
             SymmetricAlgorithmId::Des => BCRYPT_DES_ALGORITHM,
             SymmetricAlgorithmId::DesX => BCRYPT_DESX_ALGORITHM,
             SymmetricAlgorithmId::Rc2 => BCRYPT_RC2_ALGORITHM,
@@ -356,7 +355,7 @@ impl SymmetricAlgorithmKey {
         let iv_ptr = iv_copy.as_mut().map_or(null_mut(), Buffer::as_mut_ptr);
         let iv_len = iv_copy.as_ref().map_or(0, |iv| iv.len() as ULONG);
 
-        let mut encrypted_len = MaybeUninit::<ULONG>::uninit();
+        let mut encrypted_len: ULONG = 0;
         unsafe {
             Error::check(BCryptEncrypt(
                 self.handle.as_ptr(),
@@ -367,11 +366,11 @@ impl SymmetricAlgorithmKey {
                 iv_len,
                 null_mut(),
                 0,
-                encrypted_len.as_mut_ptr(),
+                &mut encrypted_len,
                 BCRYPT_BLOCK_PADDING,
             ))?;
 
-            let mut output = Buffer::new(encrypted_len.assume_init() as usize);
+            let mut output = Buffer::new(encrypted_len as usize);
 
             Error::check(BCryptEncrypt(
                 self.handle.as_ptr(),
@@ -382,7 +381,7 @@ impl SymmetricAlgorithmKey {
                 iv_len,
                 output.as_mut_ptr(),
                 output.len() as ULONG,
-                encrypted_len.as_mut_ptr(),
+                &mut encrypted_len,
                 BCRYPT_BLOCK_PADDING,
             ))
             .map(|_| output)
@@ -419,7 +418,7 @@ impl SymmetricAlgorithmKey {
         let iv_ptr = iv_copy.as_mut().map_or(null_mut(), Buffer::as_mut_ptr);
         let iv_len = iv_copy.as_ref().map_or(0, |iv| iv.len() as ULONG);
 
-        let mut plaintext_len = MaybeUninit::<ULONG>::uninit();
+        let mut plaintext_len: ULONG = 0;
         unsafe {
             Error::check(BCryptDecrypt(
                 self.handle.as_ptr(),
@@ -430,11 +429,11 @@ impl SymmetricAlgorithmKey {
                 iv_len,
                 null_mut(),
                 0,
-                plaintext_len.as_mut_ptr(),
+                &mut plaintext_len,
                 BCRYPT_BLOCK_PADDING,
             ))?;
 
-            let mut output = Buffer::new(plaintext_len.assume_init() as usize);
+            let mut output = Buffer::new(plaintext_len as usize);
 
             Error::check(BCryptDecrypt(
                 self.handle.as_ptr(),
@@ -445,7 +444,7 @@ impl SymmetricAlgorithmKey {
                 iv_len,
                 output.as_mut_ptr(),
                 output.len() as ULONG,
-                plaintext_len.as_mut_ptr(),
+                &mut plaintext_len,
                 BCRYPT_BLOCK_PADDING,
             ))
             .map(|_| output)

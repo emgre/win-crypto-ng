@@ -1,6 +1,5 @@
 use crate::{Error, Result};
 use std::ffi::{OsStr, OsString};
-use std::mem::MaybeUninit;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
@@ -23,20 +22,20 @@ pub trait Handle {
         }
     }
 
-    fn get_property<T>(&self, property: &str) -> Result<T> {
+    fn get_property<T: ZeroInitSafe>(&self, property: &str) -> Result<T> {
         let property_str = WindowsString::from_str(property);
-        let mut value = MaybeUninit::<T>::uninit();
-        let mut result_len = MaybeUninit::<ULONG>::uninit();
+        let mut value = T::zeroed();
+        let mut result_len: ULONG = 0;
         unsafe {
             Error::check(BCryptGetProperty(
                 self.as_ptr(),
                 property_str.as_ptr(),
-                value.as_mut_ptr() as *mut UCHAR,
+                &mut value as *mut _ as *mut UCHAR,
                 std::mem::size_of::<T>() as ULONG,
-                result_len.as_mut_ptr(),
+                &mut result_len,
                 0,
             ))
-            .map(|_| value.assume_init())
+            .map(|_| value)
         }
     }
 }
@@ -120,6 +119,19 @@ impl WindowsString {
             .to_string()
     }
 }
+
+/// Marker trait for types that are safe to be zero-initialized.
+///
+/// NOTE: This is mainly used to work around missing `MaybeUninit` in Rust 1.34,
+/// and all the calls should ideally be replaced by relevant `MaybeUninit` calls.
+pub unsafe trait ZeroInitSafe: Sized {
+    fn zeroed() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+unsafe impl ZeroInitSafe for winapi::shared::minwindef::DWORD {}
+unsafe impl ZeroInitSafe for winapi::shared::bcrypt::BCRYPT_KEY_LENGTHS_STRUCT {}
 
 /*pub fn list_algorithms() {
     let mut alg_count = MaybeUninit::<ULONG>::uninit();
