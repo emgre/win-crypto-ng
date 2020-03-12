@@ -1,6 +1,6 @@
 //! Asymmetric encryption algorithms
 
-use crate::helpers::{AlgoHandle, Handle};
+use crate::helpers::{AlgoHandle, Handle, TypedBlob, WindowsString};
 use crate::key::KeyHandle;
 use crate::{Error, Result};
 use std::ptr::null_mut;
@@ -109,6 +109,49 @@ impl KeyPair {
             _provider: provider,
             handle,
         })
+    }
+
+    /// ```
+    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
+    ///
+    /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Dsa).unwrap();
+    /// let pair = KeyPair::generate(&algo, 1024).expect("key to be generated").finalize();
+    ///
+    /// let blob = pair.export().unwrap();
+    /// eprintln!("{:?}", blob.as_ref().dwMagic);
+    /// assert_eq!(blob.as_ref().dwMagic, winapi::shared::bcrypt::BCRYPT_DSA_PUBLIC_MAGIC);
+    /// ```
+    pub fn export(&self) -> Result<TypedBlob<BCRYPT_DSA_KEY_BLOB>> {
+        // TODO: Handle generically different key types
+        let property = WindowsString::from_str(BCRYPT_DSA_PUBLIC_BLOB);
+
+        let mut bytes: ULONG = 0;
+        unsafe {
+            Error::check(BCryptExportKey(
+                self.0.as_ptr(),
+                null_mut(),
+                property.as_ptr(),
+                null_mut(),
+                0,
+                &mut bytes,
+                0,
+            ))?;
+        }
+        let mut blob = vec![0u8; bytes as usize].into_boxed_slice();
+
+        unsafe {
+            Error::check(BCryptExportKey(
+                self.0.as_ptr(),
+                null_mut(),
+                property.as_ptr(),
+                blob.as_mut_ptr(),
+                bytes,
+                &mut bytes,
+                0,
+            ))?;
+        }
+
+        Ok(unsafe { TypedBlob::<BCRYPT_DSA_KEY_BLOB>::from_box(blob) })
     }
 }
 
