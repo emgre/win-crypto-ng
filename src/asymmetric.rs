@@ -2,6 +2,7 @@
 
 use crate::helpers::{AlgoHandle, Handle, TypedBlob, WindowsString};
 use crate::key::KeyHandle;
+use crate::property::AlgorithmName;
 use crate::{Error, Result};
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
@@ -88,6 +89,31 @@ impl AsymmetricAlgorithm {
         let handle = AlgoHandle::open(id.to_str())?;
 
         Ok(Self { handle })
+    }
+
+    ///
+    /// # Examples
+    /// ```
+    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
+    /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
+    /// assert_eq!(algo.id(), Ok(AsymmetricAlgorithmId::Rsa));
+    /// ```
+    pub fn id(&self) -> Result<AsymmetricAlgorithmId> {
+        let name = self.handle.get_property_unsized::<AlgorithmName>()?;
+
+        let name = WindowsString::from_ptr(name.as_ref().as_ptr());
+        Ok(match name.to_str().as_ref() {
+            BCRYPT_DH_ALGORITHM => AsymmetricAlgorithmId::Dh,
+            BCRYPT_DSA_ALGORITHM => AsymmetricAlgorithmId::Dsa,
+            BCRYPT_ECDH_P256_ALGORITHM => AsymmetricAlgorithmId::EcdhP256,
+            BCRYPT_ECDH_P384_ALGORITHM => AsymmetricAlgorithmId::EcdhP384,
+            BCRYPT_ECDH_P521_ALGORITHM => AsymmetricAlgorithmId::EcdhP521,
+            BCRYPT_ECDSA_P256_ALGORITHM => AsymmetricAlgorithmId::EcdsaP256,
+            BCRYPT_ECDSA_P384_ALGORITHM => AsymmetricAlgorithmId::EcdsaP384,
+            BCRYPT_ECDSA_P521_ALGORITHM => AsymmetricAlgorithmId::EcdsaP521,
+            BCRYPT_RSA_ALGORITHM => AsymmetricAlgorithmId::Rsa,
+            _ => Err(crate::Error::InvalidHandle)?,
+        })
     }
 }
 
