@@ -30,20 +30,11 @@ pub trait Handle {
         T::Value: Sized,
     {
         let property = WindowsString::from_str(T::IDENTIFIER);
+        // Determine how much data we need to allocate for the return value
+        let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
 
-        let mut size: ULONG = 0;
-        unsafe {
-            Error::check(BCryptGetProperty(
-                self.as_ptr(),
-                property.as_ptr(),
-                null_mut(),
-                0,
-                &mut size,
-                0,
-            ))?;
-        }
-
-        // Size is static, we don't need to allocate and can return data inline
+        // We are not expected to allocate extra trailing data, so construct the
+        // value and return it inline (especially important for `Copy` types)
         Ok(if size as usize == std::mem::size_of::<T::Value>() {
             let mut result = MaybeUninit::<T::Value>::uninit();
 
@@ -82,19 +73,9 @@ pub trait Handle {
     fn get_property_unsized<T: Property>(&self) -> Result<TypedBlob<T::Value>> {
         let property = WindowsString::from_str(T::IDENTIFIER);
 
-        let mut size: ULONG = 0;
-        unsafe {
-            Error::check(BCryptGetProperty(
-                self.as_ptr(),
-                property.as_ptr(),
-                null_mut(),
-                0,
-                &mut size,
-                0,
-            ))?;
-        }
-
+        let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
         let mut result = vec![0u8; size as usize].into_boxed_slice();
+
         unsafe {
             Error::check(BCryptGetProperty(
                 self.as_ptr(),
@@ -111,6 +92,14 @@ pub trait Handle {
 
         Ok(unsafe { TypedBlob::from_box_unsized(result) })
     }
+}
+
+fn get_property_size(handle: BCRYPT_HANDLE, prop: LPCWSTR) -> Result<ULONG> {
+    let mut size: ULONG = 0;
+    unsafe {
+        Error::check(BCryptGetProperty(handle, prop, null_mut(), 0, &mut size, 0))?;
+    }
+    Ok(size)
 }
 
 pub struct AlgoHandle {
