@@ -1,3 +1,4 @@
+use crate::property::Property;
 use crate::{Error, Result};
 use std::ffi::{OsStr, OsString};
 use std::marker::PhantomData;
@@ -5,18 +6,18 @@ use std::mem::MaybeUninit;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
-use winapi::shared::ntdef::{LPCWSTR, PUCHAR, UCHAR, ULONG, VOID};
+use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, VOID};
 
 pub trait Handle {
     fn as_ptr(&self) -> BCRYPT_HANDLE;
     fn as_mut_ptr(&mut self) -> *mut BCRYPT_HANDLE;
 
-    fn set_property<T: ?Sized>(&self, property: &str, value: &T) -> Result<()> {
-        let property_str = WindowsString::from_str(property);
+    fn set_property<T: Property>(&self, value: &T::Value) -> Result<()> {
+        let property = WindowsString::from_str(T::IDENTIFIER);
         unsafe {
             Error::check(BCryptSetProperty(
                 self.as_ptr(),
-                property_str.as_ptr(),
+                property.as_ptr(),
                 value as *const _ as PUCHAR,
                 std::mem::size_of_val(value) as ULONG,
                 0,
@@ -24,21 +25,91 @@ pub trait Handle {
         }
     }
 
-    fn get_property<T>(&self, property: &str) -> Result<T> {
-        let property_str = WindowsString::from_str(property);
-        let mut value = MaybeUninit::<T>::uninit();
-        let mut result_len = MaybeUninit::<ULONG>::uninit();
+    fn get_property<T: Property>(&self) -> Result<MaybeUnsized<T::Value>>
+    where
+        T::Value: Sized,
+    {
+        let property = WindowsString::from_str(T::IDENTIFIER);
+
+        let mut size: ULONG = 0;
         unsafe {
             Error::check(BCryptGetProperty(
                 self.as_ptr(),
-                property_str.as_ptr(),
-                value.as_mut_ptr() as *mut UCHAR,
-                std::mem::size_of::<T>() as ULONG,
-                result_len.as_mut_ptr(),
+                property.as_ptr(),
+                null_mut(),
                 0,
-            ))
-            .map(|_| value.assume_init())
+                &mut size,
+                0,
+            ))?;
         }
+
+        // Size is static, we don't need to allocate and can return data inline
+        Ok(if size as usize == std::mem::size_of::<T::Value>() {
+            let mut result = MaybeUninit::<T::Value>::uninit();
+
+            unsafe {
+                Error::check(BCryptGetProperty(
+                    self.as_ptr(),
+                    property.as_ptr(),
+                    result.as_mut_ptr() as *mut _,
+                    size,
+                    &mut size,
+                    0,
+                ))?;
+            }
+
+            MaybeUnsized::Inline(unsafe { result.assume_init() })
+        } else {
+            let mut result = vec![0u8; size as usize].into_boxed_slice();
+            unsafe {
+                Error::check(BCryptGetProperty(
+                    self.as_ptr(),
+                    property.as_ptr(),
+                    result.as_mut_ptr(),
+                    size,
+                    &mut size,
+                    0,
+                ))?;
+            }
+            // Assert that we actually wrote as many bytes as we were asked to
+            // allocate
+            assert_eq!(result.len(), size as usize);
+
+            MaybeUnsized::Unsized(unsafe { TypedBlob::from_box_unsized(result) })
+        })
+    }
+
+    fn get_property_unsized<T: Property>(&self) -> Result<TypedBlob<T::Value>> {
+        let property = WindowsString::from_str(T::IDENTIFIER);
+
+        let mut size: ULONG = 0;
+        unsafe {
+            Error::check(BCryptGetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                null_mut(),
+                0,
+                &mut size,
+                0,
+            ))?;
+        }
+
+        let mut result = vec![0u8; size as usize].into_boxed_slice();
+        unsafe {
+            Error::check(BCryptGetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                result.as_mut_ptr(),
+                size,
+                &mut size,
+                0,
+            ))?;
+        }
+        // Assert that we actually wrote as many bytes as we were asked to
+        // allocate
+        assert_eq!(result.len(), size as usize);
+
+        Ok(unsafe { TypedBlob::from_box_unsized(result) })
     }
 }
 
@@ -240,14 +311,34 @@ impl<T: ?Sized> TypedBlob<T> {
     pub unsafe fn from_box_unsized(allocation: Box<[u8]>) -> Self {
         // Verify that we can produce a valid reference (which are required to
         // always be well-aligned).
-        assert_eq!(
-            allocation.as_ptr() as usize % std::mem::align_of::<&T>(),
-            0
-        );
+        assert_eq!(allocation.as_ptr() as usize % std::mem::align_of::<&T>(), 0);
 
         TypedBlob {
             allocation,
             marker: PhantomData,
+        }
+    }
+}
+
+/// Helper struct that contains the data either inline or in a heap allocation.
+/// Allows to skip allocation for sufficiently small data or when the size is
+/// static.
+pub enum MaybeUnsized<T> {
+    Inline(T),
+    Unsized(TypedBlob<T>),
+}
+
+impl<T: Copy> MaybeUnsized<T> {
+    pub fn copied(&self) -> T {
+        *self.as_ref()
+    }
+}
+
+impl<T> AsRef<T> for MaybeUnsized<T> {
+    fn as_ref(&self) -> &T {
+        match self {
+            Self::Inline(value) => &value,
+            Self::Unsized(blob) => blob.as_ref(),
         }
     }
 }
