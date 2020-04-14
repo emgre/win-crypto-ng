@@ -8,7 +8,7 @@
 //! > **NOTE**: This is currently a stub and should be expanded.
 
 use crate::helpers::{AlgoHandle, Handle, TypedBlob, WindowsString};
-use crate::key::KeyHandle;
+use crate::key::{BlobType, KeyHandle};
 use crate::property::AlgorithmName;
 use crate::{Error, Result};
 use std::convert::TryFrom;
@@ -155,17 +155,18 @@ impl KeyPair {
 
     /// ```
     /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
+    /// # use win_crypto_ng::key::{BlobType, DsaPublic};
     ///
     /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Dsa).unwrap();
     /// let pair = KeyPair::generate(&algo, 1024).expect("key to be generated").finalize();
     ///
-    /// let blob = pair.export().unwrap();
-    /// eprintln!("{:?}", blob.dwMagic);
-    /// assert_eq!(blob.dwMagic, winapi::shared::bcrypt::BCRYPT_DSA_PUBLIC_MAGIC);
+    /// let blob = pair.export(BlobType::DsaPublic).unwrap();
+    /// eprintln!("{:?}", blob.Magic);
+    /// assert_eq!(blob.Magic, winapi::shared::bcrypt::BCRYPT_DSA_PUBLIC_MAGIC);
+    /// assert!(blob.try_into::<DsaPublic>().is_ok());
     /// ```
-    pub fn export(&self) -> Result<TypedBlob<BCRYPT_DSA_KEY_BLOB>> {
-        // TODO: Handle generically different key types
-        let property = WindowsString::from_str(BCRYPT_DSA_PUBLIC_BLOB);
+    pub fn export(&self, kind: BlobType) -> Result<TypedBlob<BCRYPT_KEY_BLOB>> {
+        let property = WindowsString::from_str(kind.as_value());
 
         let mut bytes: ULONG = 0;
         unsafe {
@@ -193,7 +194,7 @@ impl KeyPair {
             ))?;
         }
 
-        Ok(unsafe { TypedBlob::<BCRYPT_DSA_KEY_BLOB>::from_box(blob) })
+        Ok(unsafe { TypedBlob::from_box(blob) })
     }
 }
 
