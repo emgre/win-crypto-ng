@@ -217,7 +217,7 @@ impl<T: ?Sized> TypedBlob<T> {
         self.into()
     }
 
-    fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         &self.allocation
     }
 }
