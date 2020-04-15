@@ -153,17 +153,28 @@ impl KeyPair {
         })
     }
 
+    /// Attempts to export the key to a given blob type.
+    /// # Example
     /// ```
     /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
-    /// # use win_crypto_ng::key::{BlobType, DsaPublic};
+    /// # use win_crypto_ng::key::{BlobType, RsaPublic, RsaPrivate};
     ///
-    /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Dsa).unwrap();
+    /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
     /// let pair = KeyPair::generate(&algo, 1024).expect("key to be generated").finalize();
     ///
-    /// let blob = pair.export(BlobType::DsaPublic).unwrap();
+    /// let blob = pair.export(BlobType::RsaPublic).unwrap();
+    /// dbg!(blob.as_bytes());
     /// eprintln!("{:?}", blob.Magic);
-    /// assert_eq!(blob.Magic, winapi::shared::bcrypt::BCRYPT_DSA_PUBLIC_MAGIC);
-    /// assert!(blob.try_into::<DsaPublic>().is_ok());
+    /// assert_eq!(blob.Magic, winapi::shared::bcrypt::BCRYPT_RSAPUBLIC_MAGIC);
+    ///
+    /// let public = blob.try_into::<RsaPublic>().unwrap();
+    /// let pub_exp = public.pub_exp();
+    /// let modulus = public.modulus();
+    ///
+    /// let blob = pair.export(BlobType::RsaPrivate).unwrap();
+    /// let private = blob.try_into::<RsaPrivate>().unwrap();
+    /// assert_eq!(pub_exp, private.pub_exp());
+    /// assert_eq!(modulus, private.modulus());
     /// ```
     pub fn export(&self, kind: BlobType) -> Result<TypedBlob<BCRYPT_KEY_BLOB>> {
         let property = WindowsString::from_str(kind.as_value());
