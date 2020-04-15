@@ -148,3 +148,175 @@ impl TypedBlob<BCRYPT_KEY_BLOB> {
         }
     }
 }
+
+impl TypedBlob<RsaPublic> {
+    /// Returns a big-endian multiprecision integer representing the public exponent.
+    pub fn pub_exp(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::pub_exp(self)
+    }
+    /// Returns a big-endian multiprecision integer representing the modulus.
+    pub fn modulus(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::modulus(self)
+    }
+}
+
+impl TypedBlob<RsaPrivate> {
+        /// Public exponent as a big-endian multiprecision integer.
+        pub fn pub_exp(&self) -> &[u8] {
+            <Self as private::RsaKeyBlob>::pub_exp(self)
+        }
+        /// Modulus as a big-endian multiprecision integer.
+        pub fn modulus(&self) -> &[u8] {
+            <Self as private::RsaKeyBlob>::modulus(self)
+        }
+        /// First prime as a big-endian multiprecision integer.
+        pub fn prime_first(&self) -> &[u8] {
+            <Self as private::RsaKeyBlob>::prime_first(self)
+        }
+        /// Second prime as a big-endian multiprecision integer.
+        pub fn prime_second(&self) -> &[u8] {
+            <Self as private::RsaKeyBlob>::prime_second(self)
+        }
+}
+
+impl TypedBlob<RsaFullPrivate> {
+    /// Public exponent as a big-endian multiprecision integer.
+    pub fn pub_exp(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::pub_exp(self)
+    }
+    /// Modulus as a big-endian multiprecision integer.
+    pub fn modulus(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::modulus(self)
+    }
+    /// First prime as a big-endian multiprecision integer.
+    pub fn prime_first(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::prime_first(self)
+    }
+    /// Second prime as a big-endian multiprecision integer.
+    pub fn prime_second(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::prime_second(self)
+    }
+    /// First exponent as a big-endian multiprecision integer.
+    pub fn exp_first(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::exp_first(self)
+    }
+    /// Second exponent as a big-endian multiprecision integer.
+    pub fn exp_second(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::exp_second(self)
+    }
+    /// Coefficient as a big-endian multiprecision integer.
+    pub fn coeff(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::coeff(self)
+    }
+    /// Private exponent as a big-endian multiprecision integer.
+    pub fn priv_exp(&self) -> &[u8] {
+        <Self as private::RsaKeyBlob>::priv_exp(self)
+    }
+}
+
+mod private {
+    use winapi::shared::bcrypt::BCRYPT_RSAKEY_BLOB;
+    use crate::helpers::TypedBlob;
+
+    pub(super) trait AsBytes {
+        fn as_bytes(&self) -> &[u8];
+    }
+
+    impl<T: ?Sized> AsBytes for TypedBlob<T> {
+        fn as_bytes(&self) -> &[u8] {
+            self.as_bytes()
+        }
+    }
+
+    // TODO: Extract that to a macro for dynamic structs
+    pub(super) trait RsaKeyBlob {
+        /// Public exponent as a big-endian multiprecision integer.
+        fn pub_exp(&self) -> &[u8];
+        /// Modulus as a big-endian multiprecision integer.
+        fn modulus(&self) -> &[u8];
+        fn prime_first(&self) -> &[u8];
+        fn prime_second(&self) -> &[u8];
+        fn exp_first(&self) -> &[u8];
+        fn exp_second(&self) -> &[u8];
+        fn coeff(&self) -> &[u8];
+        fn priv_exp(&self) -> &[u8];
+    }
+
+    impl<T> RsaKeyBlob for T where T: AsBytes + AsRef<BCRYPT_RSAKEY_BLOB> {
+        fn pub_exp(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbPublicExp as usize)]
+        }
+
+        fn modulus(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
+                + self.pub_exp().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbModulus as usize)]
+        }
+
+        fn prime_first(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
+                + self.pub_exp().len()
+                + self.modulus().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbPrime1 as usize)]
+        }
+
+        fn prime_second(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
+                + self.pub_exp().len()
+                + self.modulus().len()
+                + self.prime_first().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbPrime2 as usize)]
+        }
+
+        fn exp_first(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
+                + self.pub_exp().len()
+                + self.modulus().len()
+                + self.prime_first().len()
+                + self.prime_second().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbPrime1 as usize)]
+        }
+
+        fn exp_second(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
+                + self.pub_exp().len()
+                + self.modulus().len()
+                + self.prime_first().len()
+                + self.prime_second().len()
+                + self.exp_first().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbPrime2 as usize)]
+        }
+
+        fn coeff(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
+                + self.pub_exp().len()
+                + self.modulus().len()
+                + self.prime_first().len()
+                + self.prime_second().len()
+                + self.exp_first().len()
+                + self.exp_second().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbPrime1 as usize)]
+        }
+
+        fn priv_exp(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
+                + self.pub_exp().len()
+                + self.modulus().len()
+                + self.prime_first().len()
+                + self.prime_second().len()
+                + self.exp_first().len()
+                + self.exp_second().len()
+                + self.coeff().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbModulus as usize)]
+        }
+    }
+}
