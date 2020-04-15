@@ -3,6 +3,7 @@ use crate::{Error, Result};
 use std::ffi::{OsStr, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
+use std::ops::Deref;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
@@ -222,16 +223,24 @@ impl<T: ?Sized> TypedBlob<T> {
     }
 }
 
-impl<T: Sized> AsRef<T> for TypedBlob<T> {
+impl<T: Sized> Deref for TypedBlob<T> {
+    type Target = T;
+
     /// Creates a typed reference to the underlying data structure backed by the
     /// source bytes.
-    fn as_ref(&self) -> &T {
+    fn deref(&self) -> &T {
         // SAFETY: The only way to create this struct with sized `T` is via
         // `TypedBlob::from_box`, where:
         // 1. the caller has to prove that the data is of correct format,
         // 2. we check that the resulting reference will be well-aligned, and
         // 3. the allocation is big enough to hold a value of type `T`.
         unsafe { &*(self.allocation.as_ptr() as *const T) }
+    }
+}
+
+impl<T: Sized> AsRef<T> for TypedBlob<T> {
+    fn as_ref(&self) -> &T {
+        self
     }
 }
 
@@ -348,8 +357,8 @@ mod tests {
 
         let bytes = vec![0x1, 0x1, 0xFF, 0xFF, 0x2, 0x2, 0x2, 0x2, 0xDE, 0xDE].into_boxed_slice();
         let typed = unsafe { TypedBlob::<Inner>::from_box(bytes.clone()) };
-        assert_eq!(typed.as_ref().first, 0x0101);
-        assert_eq!(typed.as_ref().second, 0x02020202);
+        assert_eq!(typed.first, 0x0101);
+        assert_eq!(typed.second, 0x02020202);
         let typed = unsafe { TypedBlob::<[u8; 10]>::from_box(bytes.clone()) };
         assert_eq!(typed.as_ref(), bytes.as_ref());
 
