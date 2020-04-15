@@ -299,6 +299,10 @@ impl<T: ?Sized> TypedBlob<T> {
     /// Converts an opaque blob of bytes into a typed blob asserting that the
     /// raw bytes correspond in shape to value of type `T`.
     ///
+    /// **NOTE: Only slices are supported at the moment.** To uphold safety
+    /// invariants, this type can only be safely dereferenced for slice types,
+    /// as long as the allocation size matches the slice layout.
+    ///
     /// # Panics
     /// This function panicks if the backing pointee alignment is not compatible
     /// with that of `&T`.
