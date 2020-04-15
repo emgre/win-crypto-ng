@@ -149,6 +149,35 @@ impl TypedBlob<BCRYPT_KEY_BLOB> {
     }
 }
 
+macro_rules! ecc_forward_impls {
+    ($name: ident, public) => {
+        impl TypedBlob<$name> {
+            /// `x` coordinate as big-endian multiprecision integer.
+            pub fn x(&self) -> &[u8] { <Self as private::EccKeyBlob>::x(self) }
+            /// `y` coordinate as big-endian multiprecision integer.
+            pub fn y(&self) -> &[u8] { <Self as private::EccKeyBlob>::y(self) }
+        }
+    };
+    ($name: ident, private) => {
+        ecc_forward_impls!($name, public);
+        impl TypedBlob<$name> {
+            /// `d` coordinate as big-endian multiprecision integer.
+            pub fn d(&self) -> &[u8] { <Self as private::EccKeyBlob>::d(self) }
+        }
+    };
+    ($public: ident, $private: ident) => {
+        ecc_forward_impls!($public, public);
+        ecc_forward_impls!($private, private);
+    };
+}
+
+ecc_forward_impls!(EcdhP256Public, EcdhP256Private);
+ecc_forward_impls!(EcdhP384Public, EcdhP384Private);
+ecc_forward_impls!(EcdhP521Public, EcdhP521Private);
+ecc_forward_impls!(EcdsaP256Public, EcdsaP256Private);
+ecc_forward_impls!(EcdsaP384Public, EcdsaP384Private);
+ecc_forward_impls!(EcdsaP521Public, EcdsaP521Private);
+
 impl TypedBlob<RsaPublic> {
     /// Returns a big-endian multiprecision integer representing the public exponent.
     pub fn pub_exp(&self) -> &[u8] {
@@ -215,7 +244,7 @@ impl TypedBlob<RsaFullPrivate> {
 }
 
 mod private {
-    use winapi::shared::bcrypt::BCRYPT_RSAKEY_BLOB;
+    use winapi::shared::bcrypt::{BCRYPT_RSAKEY_BLOB, BCRYPT_ECCKEY_BLOB};
     use crate::helpers::TypedBlob;
 
     pub(super) trait AsBytes {
@@ -225,6 +254,38 @@ mod private {
     impl<T: ?Sized> AsBytes for TypedBlob<T> {
         fn as_bytes(&self) -> &[u8] {
             self.as_bytes()
+        }
+    }
+
+    // TODO: Extract that to a macro for dynamic structs
+    pub(super) trait EccKeyBlob {
+        /// `x` coordinate as big-endian multiprecision integer.
+        fn x(&self) -> &[u8];
+        /// `y` coordinate as big-endian multiprecision integer.
+        fn y(&self) -> &[u8];
+        /// `d` value as big-endian multiprecision integer.
+        fn d(&self) -> &[u8];
+    }
+
+    impl<T> EccKeyBlob for T where T: AsBytes + AsRef<BCRYPT_ECCKEY_BLOB> {
+        fn x(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_ECCKEY_BLOB>();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
+        }
+        /// `y` coordinate as big-endian multiprecision integer.
+        fn y(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_ECCKEY_BLOB>()
+                + self.x().len();
+
+            &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
+        }
+        /// `d` value as big-endian multiprecision integer.
+        fn d(&self) -> &[u8] {
+            let offset = std::mem::size_of::<BCRYPT_ECCKEY_BLOB>()
+                + self.x().len()
+                + self.y().len();
+                &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
         }
     }
 
