@@ -206,6 +206,12 @@ pub struct TypedBlob<T: ?Sized> {
     marker: PhantomData<T>,
 }
 
+impl<T: ?Sized> std::fmt::Debug for TypedBlob<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TypedBlob({}, {:?})", std::any::type_name::<T>(), self.allocation)
+    }
+}
+
 impl<T: ?Sized> Into<Box<[u8]>> for TypedBlob<T> {
     fn into(self) -> Box<[u8]> {
         self.allocation
