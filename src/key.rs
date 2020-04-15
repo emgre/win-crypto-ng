@@ -95,133 +95,52 @@ impl BlobType {
     }
 }
 
+/// Marker trait for values containing CNG key blob types.
 pub trait KeyBlob {
     const MAGIC: ULONG;
     type Value;
 }
 
-pub enum DhPrivate {}
-impl KeyBlob for DhPrivate {
-    const MAGIC: ULONG = BCRYPT_DH_PRIVATE_MAGIC;
-    type Value = BCRYPT_DH_KEY_BLOB;
+macro_rules! newtype_key_blob {
+    ($name: ident, $magic: expr, $value: ty) => {
+        #[repr(transparent)]
+        pub struct $name($value);
+        impl AsRef<$value> for $name {
+            fn as_ref(&self) -> &$value {
+                &self.0
+            }
+        }
+        impl KeyBlob for $name {
+            const MAGIC: ULONG = $magic;
+            type Value = $value;
+        }
+    };
 }
 
-pub enum DsaPublic {}
-impl KeyBlob for DsaPublic {
-    const MAGIC: ULONG = BCRYPT_DSA_PUBLIC_MAGIC;
-    type Value = BCRYPT_DSA_KEY_BLOB;
-}
-
-pub enum DsaPrivate {}
-impl KeyBlob for DsaPrivate {
-    const MAGIC: ULONG = BCRYPT_DSA_PRIVATE_MAGIC;
-    type Value = BCRYPT_DSA_KEY_BLOB;
-}
-
-pub enum DsaPublicV2 {}
-impl KeyBlob for DsaPublicV2 {
-    const MAGIC: ULONG = BCRYPT_DSA_PUBLIC_MAGIC_V2;
-    type Value = BCRYPT_DSA_KEY_BLOB_V2;
-}
-
-pub enum DsaPrivateV2 {}
-impl KeyBlob for DsaPrivateV2 {
-    const MAGIC: ULONG = BCRYPT_DSA_PRIVATE_MAGIC_V2;
-    type Value = BCRYPT_DSA_KEY_BLOB_V2;
-}
-
-pub enum EcdhP256Private {}
-impl KeyBlob for EcdhP256Private {
-    const MAGIC: ULONG = BCRYPT_ECDH_PRIVATE_P256_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdhP256Public {}
-impl KeyBlob for EcdhP256Public {
-    const MAGIC: ULONG = BCRYPT_ECDH_PUBLIC_P256_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdhP384Private {}
-impl KeyBlob for EcdhP384Private {
-    const MAGIC: ULONG = BCRYPT_ECDH_PRIVATE_P384_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdhP384Public {}
-impl KeyBlob for EcdhP384Public {
-    const MAGIC: ULONG = BCRYPT_ECDH_PUBLIC_P384_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdhP521Private {}
-impl KeyBlob for EcdhP521Private {
-    const MAGIC: ULONG = BCRYPT_ECDH_PRIVATE_P521_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdhP521Public {}
-impl KeyBlob for EcdhP521Public {
-    const MAGIC: ULONG = BCRYPT_ECDH_PUBLIC_P521_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdsaP256Private {}
-impl KeyBlob for EcdsaP256Private {
-    const MAGIC: ULONG = BCRYPT_ECDSA_PRIVATE_P256_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdsaP256Public {}
-impl KeyBlob for EcdsaP256Public {
-    const MAGIC: ULONG = BCRYPT_ECDSA_PUBLIC_P256_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdsaP384Private {}
-impl KeyBlob for EcdsaP384Private {
-    const MAGIC: ULONG = BCRYPT_ECDSA_PRIVATE_P384_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdsaP384Public {}
-impl KeyBlob for EcdsaP384Public {
-    const MAGIC: ULONG = BCRYPT_ECDSA_PUBLIC_P384_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdsaP521Private {}
-impl KeyBlob for EcdsaP521Private {
-    const MAGIC: ULONG = BCRYPT_ECDSA_PRIVATE_P521_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum EcdsaP521Public {}
-impl KeyBlob for EcdsaP521Public {
-    const MAGIC: ULONG = BCRYPT_ECDSA_PUBLIC_P521_MAGIC;
-    type Value = BCRYPT_ECCKEY_BLOB;
-}
-
-pub enum RsaFullPrivate {}
-impl KeyBlob for RsaFullPrivate {
-    const MAGIC: ULONG = BCRYPT_RSAFULLPRIVATE_MAGIC;
-    type Value = BCRYPT_RSAKEY_BLOB;
-}
-
-pub enum RsaPrivate {}
-impl KeyBlob for RsaPrivate {
-    const MAGIC: ULONG = BCRYPT_RSAPRIVATE_MAGIC;
-    type Value = BCRYPT_RSAKEY_BLOB;
-}
-
-pub enum RsaPublic {}
-impl KeyBlob for RsaPublic {
-    const MAGIC: ULONG = BCRYPT_RSAPUBLIC_MAGIC;
-    type Value = BCRYPT_RSAKEY_BLOB;
-}
+newtype_key_blob!(DhPrivate, BCRYPT_DH_PRIVATE_MAGIC, BCRYPT_DH_KEY_BLOB);
+newtype_key_blob!(DhPublic, BCRYPT_DH_PUBLIC_MAGIC, BCRYPT_DH_KEY_BLOB);
+newtype_key_blob!(DsaPublic, BCRYPT_DSA_PUBLIC_MAGIC, BCRYPT_DSA_KEY_BLOB);
+newtype_key_blob!(DsaPrivate, BCRYPT_DSA_PRIVATE_MAGIC, BCRYPT_DSA_KEY_BLOB);
+newtype_key_blob!(DsaPublicV2, BCRYPT_DSA_PUBLIC_MAGIC_V2, BCRYPT_DSA_KEY_BLOB_V2);
+newtype_key_blob!(DsaPrivateV2, BCRYPT_DSA_PRIVATE_MAGIC_V2, BCRYPT_DSA_KEY_BLOB_V2);
+newtype_key_blob!(RsaFullPrivate, BCRYPT_RSAFULLPRIVATE_MAGIC, BCRYPT_RSAKEY_BLOB);
+newtype_key_blob!(RsaPrivate, BCRYPT_RSAPRIVATE_MAGIC, BCRYPT_RSAKEY_BLOB);
+newtype_key_blob!(RsaPublic, BCRYPT_RSAPUBLIC_MAGIC, BCRYPT_RSAKEY_BLOB);
+newtype_key_blob!(EcdhP256Public, BCRYPT_ECDH_PUBLIC_P256_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdhP256Private, BCRYPT_ECDH_PRIVATE_P256_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdhP384Public, BCRYPT_ECDH_PUBLIC_P384_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdhP384Private, BCRYPT_ECDH_PRIVATE_P384_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdhP521Public, BCRYPT_ECDH_PUBLIC_P521_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdhP521Private, BCRYPT_ECDH_PRIVATE_P521_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdsaP256Public, BCRYPT_ECDSA_PUBLIC_P256_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdsaP256Private, BCRYPT_ECDSA_PRIVATE_P256_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdsaP384Public, BCRYPT_ECDSA_PUBLIC_P384_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdsaP384Private, BCRYPT_ECDSA_PRIVATE_P384_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdsaP521Public, BCRYPT_ECDSA_PUBLIC_P521_MAGIC, BCRYPT_ECCKEY_BLOB);
+newtype_key_blob!(EcdsaP521Private, BCRYPT_ECDSA_PRIVATE_P521_MAGIC, BCRYPT_ECCKEY_BLOB);
 
 impl TypedBlob<BCRYPT_KEY_BLOB> {
-    pub fn try_into<T: KeyBlob>(self) -> Result<TypedBlob<T::Value>, Self> {
+    pub fn try_into<T: KeyBlob>(self) -> Result<TypedBlob<T>, Self> {
         if self.Magic == T::MAGIC {
             Ok(unsafe { TypedBlob::from_box(self.into_inner()) })
         } else {
