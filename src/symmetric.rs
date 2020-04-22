@@ -90,7 +90,7 @@ pub enum SymmetricAlgorithmId {
 }
 
 impl SymmetricAlgorithmId {
-    fn to_str(&self) -> &str {
+    fn to_str(&self) -> &'static str {
         match self {
             Self::Aes => BCRYPT_AES_ALGORITHM,
             Self::Des => BCRYPT_DES_ALGORITHM,
@@ -134,7 +134,7 @@ pub enum ChainingMode {
 }
 
 impl ChainingMode {
-    fn to_str(&self) -> &str {
+    fn to_str(&self) -> &'static str {
         match self {
             Self::Ecb => BCRYPT_CHAIN_MODE_ECB,
             Self::Cbc => BCRYPT_CHAIN_MODE_CBC,
