@@ -112,8 +112,10 @@ impl WindowsString {
     pub fn as_ptr(&self) -> LPCWSTR {
         self.inner.as_ptr()
     }
+}
 
-    pub fn to_str(&self) -> String {
+impl ToString for WindowsString {
+    fn to_string(&self) -> String {
         OsString::from_wide(&self.inner)
             .to_string_lossy()
             .as_ref()
