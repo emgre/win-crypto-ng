@@ -10,6 +10,17 @@ pub trait Property {
     type Value: ?Sized;
 }
 
+/// [**BCRYPT_ALGORITHM_NAME**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_ALGORITHM_NAME)
+///
+/// `L"AlgorithmName"`
+///
+/// A null-terminated Unicode string that contains the name of the algorithm.
+pub enum AlgorithmName {}
+impl Property for AlgorithmName {
+    const IDENTIFIER: &'static str = bcrypt::BCRYPT_ALGORITHM_NAME;
+    type Value = [WCHAR];
+}
+
 /// [**BCRYPT_BLOCK_LENGTH**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_BLOCK_LENGTH)
 ///
 /// `L"BlockLength"`
