@@ -86,9 +86,6 @@ pub trait Handle {
                 0,
             ))?;
         }
-        // Assert that we actually wrote as many bytes as we were asked to
-        // allocate
-        assert_eq!(result.len(), size as usize);
 
         Ok(unsafe { TypedBlob::from_box_unsized(result) })
     }
