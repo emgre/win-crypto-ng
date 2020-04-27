@@ -44,11 +44,12 @@
 
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
+use crate::property::{self, BlockLength, KeyLength, KeyLengths, ObjectLength};
 use crate::{Error, Result};
 use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
-use winapi::shared::minwindef::{DWORD, PUCHAR, ULONG};
+use winapi::shared::minwindef::{PUCHAR, ULONG};
 
 /// Symmetric algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
@@ -165,8 +166,8 @@ impl SymmetricAlgorithm {
     pub fn open(id: SymmetricAlgorithmId, chaining_mode: ChainingMode) -> Result<Self> {
         let handle = AlgoHandle::open(id.to_str())?;
 
-        let chaining_mode_str = WindowsString::from_str(chaining_mode.to_str());
-        handle.set_property(BCRYPT_CHAINING_MODE, chaining_mode_str.as_slice())?;
+        let value = WindowsString::from_str(chaining_mode.to_str());
+        handle.set_property::<property::ChainingMode>(value.as_slice())?;
 
         Ok(Self {
             handle,
@@ -203,18 +204,17 @@ impl SymmetricAlgorithm {
     /// assert_eq!([128, 192, 256], valid_key_sizes.as_slice());
     /// ```
     pub fn valid_key_sizes(&self) -> Result<Vec<usize>> {
-        let key_sizes_struct = self
-            .handle
-            .get_property::<BCRYPT_KEY_LENGTHS_STRUCT>(BCRYPT_KEY_LENGTHS)?;
+        let key_sizes = self.handle.get_property::<KeyLengths>()?;
+        let key_sizes = key_sizes.as_ref();
 
-        if key_sizes_struct.dwIncrement != 0 {
+        if key_sizes.dwIncrement != 0 {
             Ok(
-                (key_sizes_struct.dwMinLength as usize..=key_sizes_struct.dwMaxLength as usize)
-                    .step_by(key_sizes_struct.dwIncrement as usize)
+                (key_sizes.dwMinLength as usize..=key_sizes.dwMaxLength as usize)
+                    .step_by(key_sizes.dwIncrement as usize)
                     .collect(),
             )
         } else {
-            Ok(vec![key_sizes_struct.dwMinLength as usize])
+            Ok(vec![key_sizes.dwMinLength as usize])
         }
     }
 
@@ -226,10 +226,10 @@ impl SymmetricAlgorithm {
     ///
     /// [`valid_key_sizes`]: #method.valid_key_sizes
     pub fn new_key(&self, secret: &[u8]) -> Result<SymmetricAlgorithmKey> {
-        let object_size = self.handle.get_property::<DWORD>(BCRYPT_OBJECT_LENGTH)? as usize;
+        let object_size = self.handle.get_property::<ObjectLength>()?.copied();
 
         let mut key_handle = KeyHandle::new();
-        let mut object = Buffer::new(object_size);
+        let mut object = Buffer::new(object_size as usize);
         unsafe {
             Error::check(BCryptGenerateSymmetricKey(
                 self.handle.as_ptr(),
@@ -299,8 +299,8 @@ impl SymmetricAlgorithmKey {
     /// ```
     pub fn key_size(&self) -> Result<usize> {
         self.handle
-            .get_property::<DWORD>(BCRYPT_KEY_LENGTH)
-            .map(|key_size| key_size as usize)
+            .get_property::<KeyLength>()
+            .map(|key_size| key_size.copied() as usize)
     }
 
     /// Returns the block size in bytes.
@@ -319,8 +319,8 @@ impl SymmetricAlgorithmKey {
     /// ```
     pub fn block_size(&self) -> Result<usize> {
         self.handle
-            .get_property::<DWORD>(BCRYPT_BLOCK_LENGTH)
-            .map(|block_size| block_size as usize)
+            .get_property::<BlockLength>()
+            .map(|block_size| block_size.copied() as usize)
     }
 
     /// Encrypts data using the symmetric key

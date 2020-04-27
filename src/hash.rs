@@ -46,10 +46,11 @@
 
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle};
+use crate::property::{HashLength, ObjectLength};
 use crate::{Error, Result};
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
-use winapi::shared::minwindef::{DWORD, PUCHAR, ULONG};
+use winapi::shared::minwindef::{PUCHAR, ULONG};
 
 /// Hashing algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
@@ -136,10 +137,10 @@ impl HashAlgorithm {
 
     /// Creates a new hash from the algorithm
     pub fn new_hash(&self) -> Result<Hash> {
-        let object_size = self.handle.get_property::<DWORD>(BCRYPT_OBJECT_LENGTH)? as usize;
+        let object_size = self.handle.get_property::<ObjectLength>()?.copied();
 
         let mut hash_handle = HashHandle::new();
-        let mut object = Buffer::new(object_size);
+        let mut object = Buffer::new(object_size as usize);
         unsafe {
             Error::check(BCryptCreateHash(
                 self.handle.as_ptr(),
@@ -271,8 +272,8 @@ impl Hash {
     /// ```
     pub fn hash_size(&self) -> Result<usize> {
         self.handle
-            .get_property::<DWORD>(BCRYPT_HASH_LENGTH)
-            .map(|hash_size| hash_size as usize)
+            .get_property::<HashLength>()
+            .map(|hash_size| hash_size.copied() as usize)
     }
 }
 
