@@ -43,8 +43,7 @@
 //! [`SymmetricAlgorithm.valid_key_sizes`]: struct.SymmetricAlgorithm.html#method.valid_key_sizes
 
 use crate::buffer::Buffer;
-use crate::helpers::{AlgoHandle, Handle, WindowsString};
-use crate::key::KeyHandle;
+use crate::helpers::{AlgoHandle, Handle, KeyHandle, WindowsString};
 use crate::property::{self, BlockLength, KeyLength, KeyLengths, ObjectLength};
 use crate::{Error, Result};
 use std::mem::MaybeUninit;
