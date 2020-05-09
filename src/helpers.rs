@@ -66,7 +66,7 @@ pub trait Handle {
             // allocate
             assert_eq!(result.len(), size as usize);
 
-            MaybeUnsized::Unsized(unsafe { TypedBlob::from_box_unsized(result) })
+            MaybeUnsized::Unsized(unsafe { TypedBlob::from_box(result) })
         })
     }
 
