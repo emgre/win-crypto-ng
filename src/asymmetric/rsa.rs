@@ -84,7 +84,7 @@ mod tests {
         let key_pair = algo.generate_key_pair(2048).unwrap();
         assert_eq!(2048, key_pair.key_size().unwrap());
 
-        let padding_opt = PaddingOption::PKCS1(hash_algo);
+        let padding_opt = PaddingOption::Pkcs1(hash_algo);
         let signature = key_pair.sign(hash.as_slice(), padding_opt).unwrap();
         assert!(key_pair
             .verify(hash.as_slice(), signature.as_slice(), padding_opt)
