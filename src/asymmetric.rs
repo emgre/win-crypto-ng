@@ -1,17 +1,20 @@
 //! Asymmetric algorithms
-//! 
+//!
 //! Asymmetric algorithms (also known as public-key algorithms) use pairs of
 //! keys: *public key*, which can be known by others, and *private key*, which
 //! is known only to the owner. The most common usages include encryption and
 //! digital signing.
-//! 
+//!
 //! > **NOTE**: This is currently a stub and should be expanded.
 
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
+use crate::key::KeyHandle;
 use crate::property::AlgorithmName;
-use crate::Result;
+use crate::{Error, Result};
 use std::convert::TryFrom;
+use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
+use winapi::shared::ntdef::ULONG;
 
 /// Asymmetric algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
@@ -126,7 +129,47 @@ impl AsymmetricAlgorithm {
         let name = self.handle.get_property_unsized::<AlgorithmName>()?;
         let name = WindowsString::from_ptr(name.as_ref().as_ptr());
 
-        AsymmetricAlgorithmId::try_from(&*name.to_string())
-            .map_err(|_| crate::Error::InvalidHandle)
+        AsymmetricAlgorithmId::try_from(&*name.to_string()).map_err(|_| crate::Error::InvalidHandle)
+    }
+}
+
+pub struct KeyPair(KeyHandle);
+pub struct KeyPairBuilder<'a> {
+    _provider: &'a AsymmetricAlgorithm,
+    handle: BCRYPT_KEY_HANDLE,
+}
+
+impl KeyPair {
+    pub fn generate(provider: &AsymmetricAlgorithm, length: u32) -> Result<KeyPairBuilder> {
+        let mut handle: BCRYPT_KEY_HANDLE = null_mut();
+
+        crate::Error::check(unsafe {
+            BCryptGenerateKeyPair(provider.handle.as_ptr(), &mut handle, length as ULONG, 0)
+        })?;
+
+        Ok(KeyPairBuilder {
+            _provider: provider,
+            handle,
+        })
+    }
+}
+
+impl KeyPairBuilder<'_> {
+    /// # Examples
+    /// ```
+    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
+    ///
+    /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
+    /// let pair = KeyPair::generate(&algo, 1024).expect("key to be generated").finalize();
+    /// assert!(KeyPair::generate(&algo, 1023).is_err(), "key length is invalid");
+    /// ```
+    pub fn finalize(self) -> KeyPair {
+        Error::check(unsafe { BCryptFinalizeKeyPair(self.handle, 0) })
+            .map(|_| {
+                KeyPair(KeyHandle {
+                    handle: self.handle,
+                })
+            })
+            .expect("internal library error")
     }
 }
