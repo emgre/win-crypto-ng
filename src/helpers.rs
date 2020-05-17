@@ -143,8 +143,11 @@ pub struct WindowsString {
     inner: Vec<u16>,
 }
 
-#[allow(dead_code)]
 impl WindowsString {
+    pub fn new() -> Self {
+        WindowsString { inner: Vec::new() }
+    }
+
     pub fn from_str(value: &str) -> Self {
         Self {
             inner: OsStr::new(value)
@@ -169,6 +172,12 @@ impl WindowsString {
 
     pub fn as_ptr(&self) -> LPCWSTR {
         self.inner.as_ptr()
+    }
+}
+
+impl Default for WindowsString {
+    fn default() -> Self {
+        WindowsString::new()
     }
 }
 
