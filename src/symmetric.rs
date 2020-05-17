@@ -43,9 +43,9 @@
 //! [`SymmetricAlgorithm.valid_key_sizes`]: struct.SymmetricAlgorithm.html#method.valid_key_sizes
 
 use crate::buffer::Buffer;
+use crate::error::{IntoResult, Result};
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
 use crate::property::{self, BlockLength, KeyLength, KeyLengths, ObjectLength};
-use crate::{Error, Result};
 use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
@@ -231,7 +231,7 @@ impl SymmetricAlgorithm {
         let mut key_handle = KeyHandle::new();
         let mut object = Buffer::new(object_size as usize);
         unsafe {
-            Error::check(BCryptGenerateSymmetricKey(
+            BCryptGenerateSymmetricKey(
                 self.handle.as_ptr(),
                 key_handle.as_mut_ptr(),
                 object.as_mut_ptr(),
@@ -239,12 +239,13 @@ impl SymmetricAlgorithm {
                 secret.as_ptr() as PUCHAR,
                 secret.len() as ULONG,
                 0,
-            ))
-            .map(|_| SymmetricAlgorithmKey {
-                handle: key_handle,
-                _object: object,
-            })
+            )
         }
+        .into_result()
+        .map(|_| SymmetricAlgorithmKey {
+            handle: key_handle,
+            _object: object,
+        })
     }
 }
 
@@ -358,7 +359,7 @@ impl SymmetricAlgorithmKey {
 
         let mut encrypted_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
-            Error::check(BCryptEncrypt(
+            BCryptEncrypt(
                 self.handle.as_ptr(),
                 data.as_ptr() as PUCHAR,
                 data.len() as ULONG,
@@ -369,11 +370,12 @@ impl SymmetricAlgorithmKey {
                 0,
                 encrypted_len.as_mut_ptr(),
                 BCRYPT_BLOCK_PADDING,
-            ))?;
+            )
+            .into_result()?;
 
             let mut output = Buffer::new(encrypted_len.assume_init() as usize);
 
-            Error::check(BCryptEncrypt(
+            BCryptEncrypt(
                 self.handle.as_ptr(),
                 data.as_ptr() as PUCHAR,
                 data.len() as ULONG,
@@ -384,7 +386,8 @@ impl SymmetricAlgorithmKey {
                 output.len() as ULONG,
                 encrypted_len.as_mut_ptr(),
                 BCRYPT_BLOCK_PADDING,
-            ))
+            )
+            .into_result()
             .map(|_| output)
         }
     }
@@ -421,7 +424,7 @@ impl SymmetricAlgorithmKey {
 
         let mut plaintext_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
-            Error::check(BCryptDecrypt(
+            BCryptDecrypt(
                 self.handle.as_ptr(),
                 data.as_ptr() as PUCHAR,
                 data.len() as ULONG,
@@ -432,11 +435,12 @@ impl SymmetricAlgorithmKey {
                 0,
                 plaintext_len.as_mut_ptr(),
                 BCRYPT_BLOCK_PADDING,
-            ))?;
+            )
+            .into_result()?;
 
             let mut output = Buffer::new(plaintext_len.assume_init() as usize);
 
-            Error::check(BCryptDecrypt(
+            BCryptDecrypt(
                 self.handle.as_ptr(),
                 data.as_ptr() as PUCHAR,
                 data.len() as ULONG,
@@ -447,7 +451,8 @@ impl SymmetricAlgorithmKey {
                 output.len() as ULONG,
                 plaintext_len.as_mut_ptr(),
                 BCRYPT_BLOCK_PADDING,
-            ))
+            )
+            .into_result()
             .map(|_| output)
         }
     }

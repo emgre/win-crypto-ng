@@ -34,9 +34,15 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl Error {
-    pub fn check(status: NTSTATUS) -> Result<()> {
-        match status {
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub(crate) trait IntoResult {
+    fn into_result(self) -> Result<()>;
+}
+
+impl IntoResult for NTSTATUS {
+    fn into_result(self) -> Result<()> {
+        match self {
             ntstatus::STATUS_SUCCESS => Ok(()),
             ntstatus::STATUS_NOT_FOUND => Err(Error::NotFound),
             ntstatus::STATUS_INVALID_PARAMETER => Err(Error::InvalidParameter),
@@ -50,5 +56,3 @@ impl Error {
         }
     }
 }
-
-pub type Result<T> = std::result::Result<T, Error>;

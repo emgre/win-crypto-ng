@@ -45,9 +45,9 @@
 //! [`finish`]: struct.Hash.html#method.finish
 
 use crate::buffer::Buffer;
+use crate::error::{IntoResult, Result};
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
 use crate::property::{AlgorithmName, HashLength, ObjectLength};
-use crate::{Error, Result};
 use std::convert::TryFrom;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
@@ -160,7 +160,7 @@ impl HashAlgorithm {
         let mut hash_handle = HashHandle::new();
         let mut object = Buffer::new(object_size as usize);
         unsafe {
-            Error::check(BCryptCreateHash(
+            BCryptCreateHash(
                 self.handle.as_ptr(),
                 hash_handle.as_mut_ptr(),
                 object.as_mut_ptr(),
@@ -168,7 +168,8 @@ impl HashAlgorithm {
                 null_mut(),
                 0,
                 0,
-            ))
+            )
+            .into_result()
             .map(|_| Hash {
                 handle: hash_handle,
                 object,
@@ -232,13 +233,14 @@ impl Hash {
     /// [`finish`]: #method.finish
     pub fn hash(&mut self, data: &[u8]) -> Result<()> {
         unsafe {
-            Error::check(BCryptHashData(
+            BCryptHashData(
                 self.handle.as_ptr(),
                 data.as_ptr() as PUCHAR,
                 data.len() as ULONG,
                 0,
-            ))
+            )
         }
+        .into_result()
     }
 
     /// Get the hash value
@@ -266,14 +268,15 @@ impl Hash {
         let mut result = Buffer::new(hash_size);
 
         unsafe {
-            Error::check(BCryptFinishHash(
+            BCryptFinishHash(
                 self.handle.as_ptr(),
                 result.as_mut_ptr(),
                 result.len() as ULONG,
                 0,
-            ))
-            .map(|_| result)
+            )
         }
+        .into_result()
+        .map(|_| result)
     }
 
     /// Get the final hash length, in bytes.
@@ -325,7 +328,7 @@ impl Clone for Hash {
         let mut handle = HashHandle::new();
         let mut object = Buffer::new(object_size);
 
-        Error::check(unsafe {
+        unsafe {
             BCryptDuplicateHash(
                 self.handle.as_ptr(),
                 handle.as_mut_ptr(),
@@ -333,7 +336,8 @@ impl Clone for Hash {
                 object.len() as ULONG,
                 0,
             )
-        })
+        }
+        .into_result()
         .expect("to always be able to duplicate a valid hash object");
 
         Self { handle, object }

@@ -23,8 +23,8 @@
 //! [`system_preferred`]: struct.RandomNumberGenerator.html#method.system_preferred
 //! [`gen_random`]: struct.RandomNumberGenerator.html#method.gen_random
 
+use crate::error::IntoResult;
 use crate::helpers::{AlgoHandle, Handle};
-use crate::Error;
 use core::convert::TryFrom;
 use core::fmt;
 use core::ptr;
@@ -180,9 +180,8 @@ impl RandomNumberGenerator {
     fn gen_random_with_opts(&self, buffer: &mut [u8], opts: ULONG) -> crate::Result<()> {
         let handle = self.handle.handle();
 
-        Error::check(unsafe {
-            BCryptGenRandom(handle, buffer.as_mut_ptr(), buffer.len() as ULONG, opts)
-        })
+        unsafe { BCryptGenRandom(handle, buffer.as_mut_ptr(), buffer.len() as ULONG, opts) }
+            .into_result()
     }
 }
 

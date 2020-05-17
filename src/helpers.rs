@@ -1,5 +1,5 @@
+use crate::error::{IntoResult, Result};
 use crate::property::Property;
-use crate::{Error, Result};
 use std::ffi::{OsStr, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -15,14 +15,15 @@ pub trait Handle {
     fn set_property<T: Property>(&self, value: &T::Value) -> Result<()> {
         let property = WindowsString::from_str(T::IDENTIFIER);
         unsafe {
-            Error::check(BCryptSetProperty(
+            BCryptSetProperty(
                 self.as_ptr(),
                 property.as_ptr(),
                 value as *const _ as PUCHAR,
                 std::mem::size_of_val(value) as ULONG,
                 0,
-            ))
+            )
         }
+        .into_result()
     }
 
     fn get_property<T: Property>(&self) -> Result<MaybeUnsized<T::Value>>
@@ -39,29 +40,31 @@ pub trait Handle {
             let mut result = MaybeUninit::<T::Value>::uninit();
 
             unsafe {
-                Error::check(BCryptGetProperty(
+                BCryptGetProperty(
                     self.as_ptr(),
                     property.as_ptr(),
                     result.as_mut_ptr() as *mut _,
                     size,
                     &mut size,
                     0,
-                ))?;
+                )
             }
+            .into_result()?;
 
             MaybeUnsized::Inline(unsafe { result.assume_init() })
         } else {
             let mut result = vec![0u8; size as usize].into_boxed_slice();
             unsafe {
-                Error::check(BCryptGetProperty(
+                BCryptGetProperty(
                     self.as_ptr(),
                     property.as_ptr(),
                     result.as_mut_ptr(),
                     size,
                     &mut size,
                     0,
-                ))?;
+                )
             }
+            .into_result()?;
             // Assert that we actually wrote as many bytes as we were asked to
             // allocate
             assert_eq!(result.len(), size as usize);
@@ -77,15 +80,16 @@ pub trait Handle {
         let mut result = vec![0u8; size as usize].into_boxed_slice();
 
         unsafe {
-            Error::check(BCryptGetProperty(
+            BCryptGetProperty(
                 self.as_ptr(),
                 property.as_ptr(),
                 result.as_mut_ptr(),
                 size,
                 &mut size,
                 0,
-            ))?;
+            )
         }
+        .into_result()?;
 
         Ok(unsafe { TypedBlob::from_box_unsized(result) })
     }
@@ -93,9 +97,8 @@ pub trait Handle {
 
 fn get_property_size(handle: BCRYPT_HANDLE, prop: LPCWSTR) -> Result<ULONG> {
     let mut size: ULONG = 0;
-    unsafe {
-        Error::check(BCryptGetProperty(handle, prop, null_mut(), 0, &mut size, 0))?;
-    }
+    unsafe { BCryptGetProperty(handle, prop, null_mut(), 0, &mut size, 0) }.into_result()?;
+
     Ok(size)
 }
 
@@ -106,16 +109,10 @@ pub struct AlgoHandle {
 impl AlgoHandle {
     pub fn open(id: &str) -> Result<Self> {
         let mut handle = null_mut::<VOID>();
-        unsafe {
-            let id_str = WindowsString::from_str(id);
-            Error::check(BCryptOpenAlgorithmProvider(
-                &mut handle,
-                id_str.as_ptr(),
-                null(),
-                0,
-            ))
+        let id_str = WindowsString::from_str(id);
+        unsafe { BCryptOpenAlgorithmProvider(&mut handle, id_str.as_ptr(), null(), 0) }
+            .into_result()
             .map(|_| Self { handle })
-        }
     }
 }
 
