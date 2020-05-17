@@ -115,7 +115,7 @@ impl<'a> TryFrom<&'a str> for AsymmetricAlgorithmId {
 
 /// Asymmetric algorithm
 pub struct AsymmetricAlgorithm {
-    handle: AlgoHandle,
+    pub(crate) handle: AlgoHandle,
 }
 
 impl AsymmetricAlgorithm {

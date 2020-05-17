@@ -20,6 +20,7 @@ pub mod hash;
 pub mod key;
 pub mod property;
 pub mod random;
+pub mod signature;
 pub mod symmetric;
 
 pub mod helpers;
