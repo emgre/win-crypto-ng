@@ -23,7 +23,7 @@
 //! [`system_preferred`]: struct.RandomNumberGenerator.html#method.system_preferred
 //! [`gen_random`]: struct.RandomNumberGenerator.html#method.gen_random
 
-use crate::error::IntoResult;
+use crate::error::{IntoResult, Result};
 use crate::helpers::{AlgoHandle, Handle};
 use core::convert::TryFrom;
 use core::fmt;
@@ -76,7 +76,7 @@ pub enum RandomAlgorithmId {
 impl<'a> TryFrom<&'a str> for RandomAlgorithmId {
     type Error = &'a str;
 
-    fn try_from(value: &'a str) -> Result<RandomAlgorithmId, Self::Error> {
+    fn try_from(value: &'a str) -> std::result::Result<RandomAlgorithmId, Self::Error> {
         match value {
             BCRYPT_RNG_ALGORITHM => Ok(RandomAlgorithmId::Rng),
             BCRYPT_RNG_DUAL_EC_ALGORITHM => Ok(RandomAlgorithmId::DualECRng),
@@ -121,7 +121,7 @@ impl RandomNumberGenerator {
     ///
     /// assert!(rng.is_ok());
     /// ```
-    pub fn open(id: RandomAlgorithmId) -> crate::Result<RandomNumberGenerator> {
+    pub fn open(id: RandomAlgorithmId) -> Result<RandomNumberGenerator> {
         let handle = RandomAlgoHandle::open(id)?;
         Ok(Self { handle })
     }
@@ -148,7 +148,7 @@ impl RandomNumberGenerator {
     ///
     /// assert_ne!(&buffer, &[0u8; 32]);
     /// ```
-    pub fn gen_random(&self, buffer: &mut [u8]) -> crate::Result<()> {
+    pub fn gen_random(&self, buffer: &mut [u8]) -> Result<()> {
         self.gen_random_with_opts(buffer, self.handle.flags())
     }
 
@@ -170,14 +170,14 @@ impl RandomNumberGenerator {
     ///
     /// assert_ne!(&buffer, &[0u8; 32]);
     /// ```
-    pub fn gen_random_with_entropy_in_buffer(&self, buffer: &mut [u8]) -> crate::Result<()> {
+    pub fn gen_random_with_entropy_in_buffer(&self, buffer: &mut [u8]) -> Result<()> {
         self.gen_random_with_opts(
             buffer,
             self.handle.flags() | BCRYPT_RNG_USE_ENTROPY_IN_BUFFER,
         )
     }
 
-    fn gen_random_with_opts(&self, buffer: &mut [u8], opts: ULONG) -> crate::Result<()> {
+    fn gen_random_with_opts(&self, buffer: &mut [u8], opts: ULONG) -> Result<()> {
         let handle = self.handle.handle();
 
         unsafe { BCryptGenRandom(handle, buffer.as_mut_ptr(), buffer.len() as ULONG, opts) }
@@ -194,7 +194,7 @@ enum RandomAlgoHandle {
 }
 
 impl RandomAlgoHandle {
-    fn open(id: RandomAlgorithmId) -> crate::Result<Self> {
+    fn open(id: RandomAlgorithmId) -> Result<Self> {
         Ok(Self::Specified(AlgoHandle::open(id.into())?))
     }
 

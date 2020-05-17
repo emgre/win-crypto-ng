@@ -2,7 +2,6 @@ use doc_comment::doctest;
 
 pub mod buffer;
 pub mod error;
-pub use error::{Error, Result};
 pub mod hash;
 pub mod property;
 pub mod random;
