@@ -99,7 +99,7 @@ pub enum HashAlgorithmId {
 }
 
 impl HashAlgorithmId {
-    fn to_str(self) -> &'static str {
+    pub fn to_str(self) -> &'static str {
         match self {
             Self::Sha1 => BCRYPT_SHA1_ALGORITHM,
             Self::Sha256 => BCRYPT_SHA256_ALGORITHM,
