@@ -323,6 +323,36 @@ mod private {
         }
     }
 
+    /// Defines a trait for accessing dynamic fields (byte slices) for structs that
+    /// have a header of a known size which also defines the rest of the struct
+    /// layout.
+    /// Assumes a contiguous byte buffer.
+    macro_rules! dyn_struct {
+        ($(#[$outer:meta])* $ident: ident, $header: ty, $($fields: ident [$($len: ident)+]),* $(,),*) => {
+            $(#[$outer])*
+            trait $ident: AsBytes + AsRef<$header> {
+                dyn_struct! { ; $($($fields [$len]),*),* }
+
+            }
+        };
+        // Expand fields
+        ($($prev: ident,)* ; $curr: ident [$len: ident], $($fields: ident [$($len2: ident)+]),*) => {
+            #[inline(always)]
+            fn $curr(&self) -> &[u8] {
+                let this = self.as_ref();
+
+                let offset = std::mem::size_of_val(this)
+                    $(+ self.$prev().len())*;
+
+                &self.as_bytes()[offset..offset + (this.$len as usize)]
+            }
+
+            dyn_struct! { $($prev,)* $curr, ; $( $($fields [$len2],)+ ),* }
+        };
+
+        ($($prev: ident,)* ; ) => {}
+    }
+
     // TODO: Extract that to a macro for dynamic structs
     pub(super) trait DhKeyBlob {
         /// Modulus as big-endian multiprecision integer.
