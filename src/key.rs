@@ -332,16 +332,29 @@ impl<T: ?Sized> AsBytes for TypedBlob<T> {
 macro_rules! dyn_struct {
     (
         $(#[$outer:meta])*
-        trait $ident: ident { $header: ty, $($fields: ident [$( $len: ident)+],)*}
+        trait $ident: ident {
+            $header: ty,
+            $(
+                $(#[$meta:meta])* $fields: ident [$len: ident],
+            )*
+        }
     ) => {
         $(#[$outer])*
         trait $ident: AsBytes + AsRef<$header> {
-            dyn_struct! { ; $($($fields [$len],)*)* }
+            dyn_struct! { ; $($fields [$len],)* }
+            // dyn_struct! { $($( #[$meta])* $($fields [$len],)*)* }
+            // dyn_struct! { ; $( $(#[$meta])* $fields [$( $len)+],)* }
 
         }
     };
     // Expand fields
-    ($($prev: ident,)* ; $curr: ident [$len: ident], $($fields: ident [$($len2: ident)+],)*) => {
+    (
+        $($prev: ident,)* ;
+        $curr: ident [$len: ident],
+        $(
+            $fields: ident [$($field_len: ident)+],
+        )*
+    ) => {
         #[inline(always)]
         fn $curr(&self) -> &[u8] {
             let this = self.as_ref();
@@ -352,7 +365,7 @@ macro_rules! dyn_struct {
             &self.as_bytes()[offset..offset + (this.$len as usize)]
         }
 
-        dyn_struct! { $($prev,)* $curr, ; $( $($fields [$len2],)+ )* }
+        dyn_struct! { $($prev,)* $curr, ; $( $($fields [$field_len],)+ )* }
     };
 
     ($($prev: ident,)* ; ) => {}
@@ -363,6 +376,7 @@ dyn_struct! {
     #[allow(non_snake_case)]
     trait RsaKeyBlobFullPrivate {
         BCRYPT_RSAKEY_BLOB,
+        /// dsadsa
         PublicExponent[cbPublicExp], // Big-endian.
         Modulus[cbModulus], // Big-endian.
         Prime1[cbPrime1], // Big-endian.
