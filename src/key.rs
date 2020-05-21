@@ -151,81 +151,83 @@ impl TypedBlob<BCRYPT_KEY_BLOB> {
 
 impl TypedBlob<DhPublic> {
     /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { <Self as DhKeyBlob>::modulus(self) }
+    pub fn modulus(&self) -> &[u8] {DhKeyBlobPrivate::Modulus(self) }
     /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { <Self as DhKeyBlob>::generator(self) }
+    pub fn generator(&self) -> &[u8] {DhKeyBlobPrivate::Generator(self) }
     /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { <Self as DhKeyBlob>::public(self) }
+    pub fn public(&self) -> &[u8] {DhKeyBlobPrivate::Public(self) }
 }
 
 impl TypedBlob<DhPrivate> {
     /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { <Self as DhKeyBlob>::modulus(self) }
+    pub fn modulus(&self) -> &[u8] {DhKeyBlobPrivate::Modulus(self) }
     /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { <Self as DhKeyBlob>::generator(self) }
+    pub fn generator(&self) -> &[u8] {DhKeyBlobPrivate::Generator(self) }
     /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { <Self as DhKeyBlob>::public(self) }
+    pub fn public(&self) -> &[u8] {DhKeyBlobPrivate::Public(self) }
     /// PrivateExponent value as big-endian multiprecision integer.
-    pub fn priv_exp(&self) -> &[u8] { <Self as DhKeyBlob>::priv_exp(self) }
+    pub fn priv_exp(&self) -> &[u8] {DhKeyBlobPrivate::PrivateExponent(self) }
 }
 
 impl TypedBlob<DsaPublic> {
     /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { <Self as DsaKeyBlob>::modulus(self) }
+    pub fn modulus(&self) -> &[u8] {DsaKeyBlobPrivate::Modulus(self) }
     /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { <Self as DsaKeyBlob>::generator(self) }
+    pub fn generator(&self) -> &[u8] {DsaKeyBlobPrivate::Generator(self) }
     /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { <Self as DsaKeyBlob>::public(self) }
+    pub fn public(&self) -> &[u8] {DsaKeyBlobPrivate::Public(self) }
 }
 
 impl TypedBlob<DsaPrivate> {
     /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { <Self as DsaKeyBlob>::modulus(self) }
+    pub fn modulus(&self) -> &[u8] {DsaKeyBlobPrivate::Modulus(self) }
     /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { <Self as DsaKeyBlob>::generator(self) }
+    pub fn generator(&self) -> &[u8] {DsaKeyBlobPrivate::Generator(self) }
     /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { <Self as DsaKeyBlob>::public(self) }
+    pub fn public(&self) -> &[u8] {DsaKeyBlobPrivate::Public(self) }
     /// PrivateExponent value as big-endian multiprecision integer.
-    pub fn priv_exp(&self) -> &[u8] { <Self as DsaKeyBlob>::priv_exp(self) }
+    pub fn priv_exp(&self) -> &[u8] {DsaKeyBlobPrivate::PrivateExponent(self) }
 }
 
 impl TypedBlob<DsaPublicV2> {
     /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { <Self as DsaKeyBlobV2>::modulus(self) }
+    pub fn modulus(&self) -> &[u8] { DsaKeyBlobPrivateV2::Modulus(self) }
     /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { <Self as DsaKeyBlobV2>::generator(self) }
+    pub fn generator(&self) -> &[u8] { DsaKeyBlobPrivateV2::Generator(self) }
     /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { <Self as DsaKeyBlobV2>::public(self) }
+    pub fn public(&self) -> &[u8] { DsaKeyBlobPrivateV2::Public(self) }
 }
 
 impl TypedBlob<DsaPrivateV2> {
     /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { <Self as DsaKeyBlobV2>::modulus(self) }
+    pub fn modulus(&self) -> &[u8] { DsaKeyBlobPrivateV2::Modulus(self) }
     /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { <Self as DsaKeyBlobV2>::generator(self) }
+    pub fn generator(&self) -> &[u8] { DsaKeyBlobPrivateV2::Generator(self) }
     /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { <Self as DsaKeyBlobV2>::public(self) }
+    pub fn public(&self) -> &[u8] { DsaKeyBlobPrivateV2::Public(self) }
     /// PrivateExponent value as big-endian multiprecision integer.
-    pub fn priv_exp(&self) -> &[u8] { <Self as DsaKeyBlobV2>::priv_exp(self) }
+    pub fn priv_exp(&self) -> &[u8] { DsaKeyBlobPrivateV2::PrivateExponent(self) }
 }
 
 macro_rules! ecc_forward_impls {
     ($name: ident, public) => {
         impl TypedBlob<$name> {
             /// `x` coordinate as big-endian multiprecision integer.
-            pub fn x(&self) -> &[u8] { <Self as EccKeyBlob>::x(self) }
+            pub fn x(&self) -> &[u8] {EccKeyBlobPrivate::X(self) }
             /// `y` coordinate as big-endian multiprecision integer.
-            pub fn y(&self) -> &[u8] { <Self as EccKeyBlob>::y(self) }
+            pub fn y(&self) -> &[u8] {EccKeyBlobPrivate::Y(self) }
         }
     };
     ($name: ident, private) => {
         ecc_forward_impls!($name, public);
         impl TypedBlob<$name> {
             /// `d` coordinate as big-endian multiprecision integer.
-            pub fn d(&self) -> &[u8] { <Self as EccKeyBlob>::d(self) }
+            pub fn d(&self) -> &[u8] {EccKeyBlobPrivate::d(self) }
         }
     };
     ($public: ident, $private: ident) => {
+        impl EccKeyBlobPrivate for TypedBlob<$public> {}
+        impl EccKeyBlobPrivate for TypedBlob<$private> {}
         ecc_forward_impls!($public, public);
         ecc_forward_impls!($private, private);
     };
@@ -238,68 +240,78 @@ ecc_forward_impls!(EcdsaP256Public, EcdsaP256Private);
 ecc_forward_impls!(EcdsaP384Public, EcdsaP384Private);
 ecc_forward_impls!(EcdsaP521Public, EcdsaP521Private);
 
+impl RsaKeyBlobFullPrivate for TypedBlob<RsaPublic> {}
+impl RsaKeyBlobFullPrivate for TypedBlob<RsaPrivate> {}
+impl RsaKeyBlobFullPrivate for TypedBlob<RsaFullPrivate> {}
+impl DsaKeyBlobPrivate for TypedBlob<DsaPublic> {}
+impl DsaKeyBlobPrivate for TypedBlob<DsaPrivate> {}
+impl DsaKeyBlobPrivateV2 for TypedBlob<DsaPublicV2> {}
+impl DsaKeyBlobPrivateV2 for TypedBlob<DsaPrivateV2> {}
+impl DhKeyBlobPrivate for TypedBlob<DhPublic> {}
+impl DhKeyBlobPrivate for TypedBlob<DhPrivate> {}
+
 impl TypedBlob<RsaPublic> {
     /// Returns a big-endian multiprecision integer representing the public exponent.
     pub fn pub_exp(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::pub_exp(self)
+        RsaKeyBlobFullPrivate::PublicExponent(self)
     }
     /// Returns a big-endian multiprecision integer representing the modulus.
     pub fn modulus(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::modulus(self)
+        RsaKeyBlobFullPrivate::Modulus(self)
     }
 }
 
 impl TypedBlob<RsaPrivate> {
         /// Public exponent as a big-endian multiprecision integer.
         pub fn pub_exp(&self) -> &[u8] {
-            <Self as RsaKeyBlob>::pub_exp(self)
+            RsaKeyBlobFullPrivate::PublicExponent(self)
         }
         /// Modulus as a big-endian multiprecision integer.
         pub fn modulus(&self) -> &[u8] {
-            <Self as RsaKeyBlob>::modulus(self)
+            RsaKeyBlobFullPrivate::Modulus(self)
         }
         /// First prime as a big-endian multiprecision integer.
         pub fn prime_first(&self) -> &[u8] {
-            <Self as RsaKeyBlob>::prime_first(self)
+            RsaKeyBlobFullPrivate::Prime1(self)
         }
         /// Second prime as a big-endian multiprecision integer.
         pub fn prime_second(&self) -> &[u8] {
-            <Self as RsaKeyBlob>::prime_second(self)
+            RsaKeyBlobFullPrivate::Prime2(self)
         }
 }
 
 impl TypedBlob<RsaFullPrivate> {
     /// Public exponent as a big-endian multiprecision integer.
     pub fn pub_exp(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::pub_exp(self)
+        RsaKeyBlobFullPrivate::PublicExponent(self)
     }
     /// Modulus as a big-endian multiprecision integer.
     pub fn modulus(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::modulus(self)
+        RsaKeyBlobFullPrivate::Modulus(self)
     }
     /// First prime as a big-endian multiprecision integer.
     pub fn prime_first(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::prime_first(self)
+        RsaKeyBlobFullPrivate::Prime1(self)
     }
     /// Second prime as a big-endian multiprecision integer.
     pub fn prime_second(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::prime_second(self)
+        RsaKeyBlobFullPrivate::Prime2(self)
     }
     /// First exponent as a big-endian multiprecision integer.
     pub fn exp_first(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::exp_first(self)
+        RsaKeyBlobFullPrivate::Exponent1(self)
     }
     /// Second exponent as a big-endian multiprecision integer.
     pub fn exp_second(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::exp_second(self)
+        RsaKeyBlobFullPrivate::Exponent2(self)
     }
     /// Coefficient as a big-endian multiprecision integer.
     pub fn coeff(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::coeff(self)
+        RsaKeyBlobFullPrivate::Coefficient(self)
     }
     /// Private exponent as a big-endian multiprecision integer.
     pub fn priv_exp(&self) -> &[u8] {
-        <Self as RsaKeyBlob>::priv_exp(self)
+        RsaKeyBlobFullPrivate::PrivateExponent(self)
     }
 }
 
@@ -318,15 +330,18 @@ impl<T: ?Sized> AsBytes for TypedBlob<T> {
 /// layout.
 /// Assumes a contiguous byte buffer.
 macro_rules! dyn_struct {
-    ($(#[$outer:meta])* $ident: ident, $header: ty, $($fields: ident [$($len: ident)+]),* $(,),*) => {
+    (
+        $(#[$outer:meta])*
+        trait $ident: ident { $header: ty, $($fields: ident [$( $len: ident)+],)*}
+    ) => {
         $(#[$outer])*
         trait $ident: AsBytes + AsRef<$header> {
-            dyn_struct! { ; $($($fields [$len]),*),* }
+            dyn_struct! { ; $($($fields [$len],)*)* }
 
         }
     };
     // Expand fields
-    ($($prev: ident,)* ; $curr: ident [$len: ident], $($fields: ident [$($len2: ident)+]),*) => {
+    ($($prev: ident,)* ; $curr: ident [$len: ident], $($fields: ident [$($len2: ident)+],)*) => {
         #[inline(always)]
         fn $curr(&self) -> &[u8] {
             let this = self.as_ref();
@@ -337,255 +352,73 @@ macro_rules! dyn_struct {
             &self.as_bytes()[offset..offset + (this.$len as usize)]
         }
 
-        dyn_struct! { $($prev,)* $curr, ; $( $($fields [$len2],)+ ),* }
+        dyn_struct! { $($prev,)* $curr, ; $( $($fields [$len2],)+ )* }
     };
 
     ($($prev: ident,)* ; ) => {}
 }
 
-// TODO: Extract that to a macro for dynamic structs
-pub(super) trait DhKeyBlob {
-    /// Modulus as big-endian multiprecision integer.
-    fn modulus(&self) -> &[u8];
-    /// Generator coordinate as big-endian multiprecision integer.
-    fn generator(&self) -> &[u8];
-    /// Public value as big-endian multiprecision integer.
-    fn public(&self) -> &[u8];
-    /// PrivateExponent value as big-endian multiprecision integer.
-    fn priv_exp(&self) -> &[u8];
-}
-
-impl<T> DhKeyBlob for T where T: AsBytes + AsRef<BCRYPT_DH_KEY_BLOB> {
-    fn modulus(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DH_KEY_BLOB>();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn generator(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DH_KEY_BLOB>()
-            + self.modulus().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn public(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DH_KEY_BLOB>()
-        + self.modulus().len()
-        + self.generator().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn priv_exp(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB>()
-            + self.modulus().len()
-            + self.generator().len()
-            + self.public().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
+dyn_struct! {
+    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob
+    #[allow(non_snake_case)]
+    trait RsaKeyBlobFullPrivate {
+        BCRYPT_RSAKEY_BLOB,
+        PublicExponent[cbPublicExp], // Big-endian.
+        Modulus[cbModulus], // Big-endian.
+        Prime1[cbPrime1], // Big-endian.
+        Prime2[cbPrime2], // Big-endian.
+        Exponent1[cbPrime1], // Big-endian.
+        Exponent2[cbPrime2], // Big-endian.
+        Coefficient[cbPrime1], // Big-endian.
+        PrivateExponent[cbModulus], // Big-endian.
     }
 }
 
-// TODO: Extract that to a macro for dynamic structs
-pub(super) trait DsaKeyBlob {
-    /// Modulus as big-endian multiprecision integer.
-    fn modulus(&self) -> &[u8];
-    /// Generator coordinate as big-endian multiprecision integer.
-    fn generator(&self) -> &[u8];
-    /// Public value as big-endian multiprecision integer.
-    fn public(&self) -> &[u8];
-    /// PrivateExponent value as big-endian multiprecision integer.
-    fn priv_exp(&self) -> &[u8];
-}
-
-impl<T> DsaKeyBlob for T where T: AsBytes + AsRef<BCRYPT_DSA_KEY_BLOB> {
-    fn modulus(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB>();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn generator(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB>()
-            + self.modulus().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn public(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB>()
-        + self.modulus().len()
-        + self.generator().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn priv_exp(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB>()
-            + self.modulus().len()
-            + self.generator().len()
-            + self.public().len();
-
-        &self.as_bytes()[offset..offset + 20]
+dyn_struct! {
+    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
+    #[allow(non_snake_case)]
+    trait DhKeyBlobPrivate {
+        BCRYPT_DH_KEY_BLOB,
+        Modulus[cbKey], // Big-endian.
+        Generator[cbKey], // Big-endian.
+        Public[cbKey], // Big-endian.
+        PrivateExponent[cbKey], // Big-endian.
     }
 }
 
-// TODO: Extract that to a macro for dynamic structs
-pub(super) trait DsaKeyBlobV2 {
-    /// Modulus as big-endian multiprecision integer.
-    fn modulus(&self) -> &[u8];
-    /// Generator coordinate as big-endian multiprecision integer.
-    fn generator(&self) -> &[u8];
-    /// Public value as big-endian multiprecision integer.
-    fn public(&self) -> &[u8];
-    /// PrivateExponent value as big-endian multiprecision integer.
-    fn priv_exp(&self) -> &[u8];
-}
-
-impl<T> DsaKeyBlobV2 for T where T: AsBytes + AsRef<BCRYPT_DSA_KEY_BLOB_V2> {
-    fn modulus(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB_V2>();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn generator(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB_V2>()
-            + self.modulus().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn public(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB_V2>()
-        + self.modulus().len()
-        + self.generator().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    fn priv_exp(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_DSA_KEY_BLOB_V2>()
-            + self.modulus().len()
-            + self.generator().len()
-            + self.public().len();
-
-        &self.as_bytes()[offset..offset + 20]
+dyn_struct! {
+    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
+    #[allow(non_snake_case)]
+    trait DsaKeyBlobPrivate {
+        BCRYPT_DSA_KEY_BLOB,
+        Modulus[cbKey], // Big-endian.
+        Generator[cbKey], // Big-endian.
+        Public[cbKey], // Big-endian.
+        // TODO: This is exactly 20 bytes long
+        PrivateExponent[cbKey], // Big-endian.
     }
 }
 
-// TODO: Extract that to a macro for dynamic structs
-pub(super) trait EccKeyBlob {
-    /// `x` coordinate as big-endian multiprecision integer.
-    fn x(&self) -> &[u8];
-    /// `y` coordinate as big-endian multiprecision integer.
-    fn y(&self) -> &[u8];
-    /// `d` value as big-endian multiprecision integer.
-    fn d(&self) -> &[u8];
-}
-
-impl<T> EccKeyBlob for T where T: AsBytes + AsRef<BCRYPT_ECCKEY_BLOB> {
-    fn x(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_ECCKEY_BLOB>();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    /// `y` coordinate as big-endian multiprecision integer.
-    fn y(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_ECCKEY_BLOB>()
-            + self.x().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
-    }
-    /// `d` value as big-endian multiprecision integer.
-    fn d(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_ECCKEY_BLOB>()
-            + self.x().len()
-            + self.y().len();
-            &self.as_bytes()[offset..offset + (self.as_ref().cbKey as usize)]
+dyn_struct! {
+    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
+    #[allow(non_snake_case)]
+    trait DsaKeyBlobPrivateV2 {
+        BCRYPT_DSA_KEY_BLOB_V2,
+        Modulus[cbKey], // Big-endian.
+        Generator[cbKey], // Big-endian.
+        Public[cbKey], // Big-endian.
+        // TODO: This is exactly 20 bytes long
+        PrivateExponent[cbKey], // Big-endian.
     }
 }
 
-// TODO: Extract that to a macro for dynamic structs
-pub(super) trait RsaKeyBlob {
-    /// Public exponent as a big-endian multiprecision integer.
-    fn pub_exp(&self) -> &[u8];
-    /// Modulus as a big-endian multiprecision integer.
-    fn modulus(&self) -> &[u8];
-    fn prime_first(&self) -> &[u8];
-    fn prime_second(&self) -> &[u8];
-    fn exp_first(&self) -> &[u8];
-    fn exp_second(&self) -> &[u8];
-    fn coeff(&self) -> &[u8];
-    fn priv_exp(&self) -> &[u8];
-}
-
-impl<T> RsaKeyBlob for T where T: AsBytes + AsRef<BCRYPT_RSAKEY_BLOB> {
-    fn pub_exp(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbPublicExp as usize)]
-    }
-
-    fn modulus(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
-            + self.pub_exp().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbModulus as usize)]
-    }
-
-    fn prime_first(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
-            + self.pub_exp().len()
-            + self.modulus().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbPrime1 as usize)]
-    }
-
-    fn prime_second(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
-            + self.pub_exp().len()
-            + self.modulus().len()
-            + self.prime_first().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbPrime2 as usize)]
-    }
-
-    fn exp_first(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
-            + self.pub_exp().len()
-            + self.modulus().len()
-            + self.prime_first().len()
-            + self.prime_second().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbPrime1 as usize)]
-    }
-
-    fn exp_second(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
-            + self.pub_exp().len()
-            + self.modulus().len()
-            + self.prime_first().len()
-            + self.prime_second().len()
-            + self.exp_first().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbPrime2 as usize)]
-    }
-
-    fn coeff(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
-            + self.pub_exp().len()
-            + self.modulus().len()
-            + self.prime_first().len()
-            + self.prime_second().len()
-            + self.exp_first().len()
-            + self.exp_second().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbPrime1 as usize)]
-    }
-
-    fn priv_exp(&self) -> &[u8] {
-        let offset = std::mem::size_of::<BCRYPT_RSAKEY_BLOB>()
-            + self.pub_exp().len()
-            + self.modulus().len()
-            + self.prime_first().len()
-            + self.prime_second().len()
-            + self.exp_first().len()
-            + self.exp_second().len()
-            + self.coeff().len();
-
-        &self.as_bytes()[offset..offset + (self.as_ref().cbModulus as usize)]
+dyn_struct! {
+    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
+    #[allow(non_snake_case)]
+    trait EccKeyBlobPrivate {
+        BCRYPT_ECCKEY_BLOB,
+        X[cbKey], // Big-endian.
+        Y[cbKey], // Big-endian.
+        d[cbKey], // Big-endian.
     }
 }
