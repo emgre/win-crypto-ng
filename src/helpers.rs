@@ -352,6 +352,84 @@ impl<T> AsRef<T> for MaybeUnsized<T> {
     }
 }
 
+pub(crate) trait AsBytes {
+    fn as_bytes(&self) -> &[u8];
+}
+
+impl<T: ?Sized> AsBytes for TypedBlob<T> {
+    fn as_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+/// Defines a trait for accessing dynamic fields (byte slices) for structs that
+/// have a header of a known size which also defines the rest of the struct
+/// layout.
+/// Assumes a contiguous byte buffer.
+#[macro_export]
+macro_rules! dyn_struct {
+    (
+        $(#[$outer:meta])*
+        trait $ident: ident {
+            $header: ty,
+            $(
+                $(#[$meta:meta])*
+                $field: ident [$($len: tt)*],
+            )*
+        }
+    ) => {
+        $(#[$outer])*
+        trait $ident: $crate::helpers::AsBytes + AsRef<$header> {
+            dyn_struct! { ;
+                $(
+                    $(#[$meta])*
+                    $field [$($len)*],
+                )*
+            }
+        }
+    };
+    // Expand fields. Recursively expand each field, pushing the processed field
+    //  identifier to a queue which is later used to calculate field offset for
+    // subsequent fields
+    (
+        $($prev: ident,)* ;
+        $(#[$curr_meta:meta])*
+        $curr: ident [$($curr_len: tt)*],
+        $(
+            $(#[$field_meta:meta])*
+            $field: ident [$($field_len: tt)*],
+        )*
+    ) => {
+        $(#[$curr_meta])*
+        #[inline(always)]
+        fn $curr(&self) -> &[u8] {
+            let this = self.as_ref();
+
+            let offset = std::mem::size_of_val(this)
+                $(+ self.$prev().len())*;
+
+            let size: usize = dyn_struct! { this, $($curr_len)* };
+
+            &self.as_bytes()[offset..offset + size]
+        }
+        // Once expanded, push the processed ident and recursively expand other
+        // fields
+        dyn_struct! { $($prev,)* $curr, ;
+            $(
+                $(#[$field_meta])*
+                $field [$($field_len)*],
+            )*
+        }
+    };
+
+    ($($prev: ident,)* ; ) => {};
+    // Accept either header member values or arbitrary expressions (e.g. numeric
+    // constants)
+    ($this: expr, $ident: ident) => { $this.$ident as usize };
+    ($this: expr, $expr: expr) => { $expr };
+
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
