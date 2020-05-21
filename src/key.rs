@@ -315,7 +315,7 @@ impl TypedBlob<RsaFullPrivate> {
     }
 }
 
-pub(super) trait AsBytes {
+trait AsBytes {
     fn as_bytes(&self) -> &[u8];
 }
 
@@ -335,26 +335,34 @@ macro_rules! dyn_struct {
         trait $ident: ident {
             $header: ty,
             $(
-                $(#[$meta:meta])* $fields: ident [$len: ident],
+                $(#[$meta:meta])*
+                $field: ident [$len: ident],
             )*
         }
     ) => {
         $(#[$outer])*
         trait $ident: AsBytes + AsRef<$header> {
-            dyn_struct! { ; $($fields [$len],)* }
-            // dyn_struct! { $($( #[$meta])* $($fields [$len],)*)* }
-            // dyn_struct! { ; $( $(#[$meta])* $fields [$( $len)+],)* }
-
+            dyn_struct! { ;
+                $(
+                    $(#[$meta])*
+                    $field [$len],
+                )*
+            }
         }
     };
-    // Expand fields
+    // Expand fields. Recursively expand each field, pushing the processed field
+    //  identifier to a queue which is later used to calculate field offset for
+    // subsequent fields
     (
         $($prev: ident,)* ;
-        $curr: ident [$len: ident],
+        $(#[$curr_meta:meta])*
+        $curr: ident [$curr_len: ident],
         $(
-            $fields: ident [$($field_len: ident)+],
+            $(#[$field_meta:meta])*
+            $field: ident [$field_len: ident],
         )*
     ) => {
+        $(#[$curr_meta])*
         #[inline(always)]
         fn $curr(&self) -> &[u8] {
             let this = self.as_ref();
@@ -362,21 +370,26 @@ macro_rules! dyn_struct {
             let offset = std::mem::size_of_val(this)
                 $(+ self.$prev().len())*;
 
-            &self.as_bytes()[offset..offset + (this.$len as usize)]
+            &self.as_bytes()[offset..offset + (this.$curr_len as usize)]
         }
-
-        dyn_struct! { $($prev,)* $curr, ; $( $($fields [$field_len],)+ )* }
+        // Once expanded, push the processed ident and recursively expand other
+        // fields
+        dyn_struct! { $($prev,)* $curr, ;
+            $(
+                $(#[$field_meta])*
+                $field [$field_len],
+            )*
+        }
     };
 
     ($($prev: ident,)* ; ) => {}
 }
 
 dyn_struct! {
-    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob
+    /// https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob
     #[allow(non_snake_case)]
     trait RsaKeyBlobFullPrivate {
         BCRYPT_RSAKEY_BLOB,
-        /// dsadsa
         PublicExponent[cbPublicExp], // Big-endian.
         Modulus[cbModulus], // Big-endian.
         Prime1[cbPrime1], // Big-endian.
@@ -389,7 +402,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
+    /// https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
     #[allow(non_snake_case)]
     trait DhKeyBlobPrivate {
         BCRYPT_DH_KEY_BLOB,
@@ -401,7 +414,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
+    /// https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
     #[allow(non_snake_case)]
     trait DsaKeyBlobPrivate {
         BCRYPT_DSA_KEY_BLOB,
@@ -414,7 +427,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
+    /// https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
     #[allow(non_snake_case)]
     trait DsaKeyBlobPrivateV2 {
         BCRYPT_DSA_KEY_BLOB_V2,
@@ -427,7 +440,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    /// https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
+    /// https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
     #[allow(non_snake_case)]
     trait EccKeyBlobPrivate {
         BCRYPT_ECCKEY_BLOB,
