@@ -149,94 +149,6 @@ impl TypedBlob<BCRYPT_KEY_BLOB> {
     }
 }
 
-impl TypedBlob<DhPublic> {
-    /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { DhKeyBlobPublic::Modulus(self) }
-    /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { DhKeyBlobPublic::Generator(self) }
-    /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { DhKeyBlobPublic::Public(self) }
-}
-
-impl TypedBlob<DhPrivate> {
-    /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { DhKeyBlobPrivate::Modulus(self) }
-    /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { DhKeyBlobPrivate::Generator(self) }
-    /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { DhKeyBlobPrivate::Public(self) }
-    /// PrivateExponent value as big-endian multiprecision integer.
-    pub fn priv_exp(&self) -> &[u8] { DhKeyBlobPrivate::PrivateExponent(self) }
-}
-
-impl TypedBlob<DsaPublic> {
-    /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { DsaKeyBlobPublic::Modulus(self) }
-    /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { DsaKeyBlobPublic::Generator(self) }
-    /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { DsaKeyBlobPublic::Public(self) }
-}
-
-impl TypedBlob<DsaPrivate> {
-    /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { DsaKeyBlobPrivate::Modulus(self) }
-    /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { DsaKeyBlobPrivate::Generator(self) }
-    /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { DsaKeyBlobPrivate::Public(self) }
-    /// PrivateExponent value as big-endian multiprecision integer.
-    pub fn priv_exp(&self) -> &[u8] { DsaKeyBlobPrivate::PrivateExponent(self) }
-}
-
-impl TypedBlob<DsaPublicV2> {
-    /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { DsaKeyBlobPublicV2::Modulus(self) }
-    /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { DsaKeyBlobPublicV2::Generator(self) }
-    /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { DsaKeyBlobPublicV2::Public(self) }
-}
-
-impl TypedBlob<DsaPrivateV2> {
-    /// Modulus as big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] { DsaKeyBlobPrivateV2::Modulus(self) }
-    /// Generator coordinate as big-endian multiprecision integer.
-    pub fn generator(&self) -> &[u8] { DsaKeyBlobPrivateV2::Generator(self) }
-    /// Public value as big-endian multiprecision integer.
-    pub fn public(&self) -> &[u8] { DsaKeyBlobPrivateV2::Public(self) }
-    /// PrivateExponent value as big-endian multiprecision integer.
-    pub fn priv_exp(&self) -> &[u8] { DsaKeyBlobPrivateV2::PrivateExponent(self) }
-}
-
-macro_rules! ecc_forward_impls {
-    ($public: ident, $private: ident) => {
-        impl TypedBlob<$public> {
-            /// `x` coordinate as big-endian multiprecision integer.
-            pub fn x(&self) -> &[u8] { EccKeyBlobPublic::X(self) }
-            /// `y` coordinate as big-endian multiprecision integer.
-            pub fn y(&self) -> &[u8] { EccKeyBlobPublic::Y(self) }
-        }
-        impl TypedBlob<$private> {
-            /// `x` coordinate as big-endian multiprecision integer.
-            pub fn x(&self) -> &[u8] { EccKeyBlobPrivate::X(self) }
-            /// `y` coordinate as big-endian multiprecision integer.
-            pub fn y(&self) -> &[u8] { EccKeyBlobPrivate::Y(self) }
-            /// `d` coordinate as big-endian multiprecision integer.
-            pub fn d(&self) -> &[u8] { EccKeyBlobPrivate::d(self) }
-        }
-        impl EccKeyBlobPublic for TypedBlob<$public> {}
-        impl EccKeyBlobPrivate for TypedBlob<$private> {}
-    };
-}
-
-ecc_forward_impls!(EcdhP256Public, EcdhP256Private);
-ecc_forward_impls!(EcdhP384Public, EcdhP384Private);
-ecc_forward_impls!(EcdhP521Public, EcdhP521Private);
-ecc_forward_impls!(EcdsaP256Public, EcdsaP256Private);
-ecc_forward_impls!(EcdsaP384Public, EcdsaP384Private);
-ecc_forward_impls!(EcdsaP521Public, EcdsaP521Private);
-
 impl RsaKeyBlobPublic for TypedBlob<RsaPublic> {}
 impl RsaKeyBlobPrivate for TypedBlob<RsaPrivate> {}
 impl RsaKeyBlobFullPrivate for TypedBlob<RsaFullPrivate> {}
@@ -246,71 +158,18 @@ impl DsaKeyBlobPublicV2 for TypedBlob<DsaPublicV2> {}
 impl DsaKeyBlobPrivateV2 for TypedBlob<DsaPrivateV2> {}
 impl DhKeyBlobPublic for TypedBlob<DhPublic> {}
 impl DhKeyBlobPrivate for TypedBlob<DhPrivate> {}
-
-impl TypedBlob<RsaPublic> {
-    /// Returns a big-endian multiprecision integer representing the public exponent.
-    pub fn pub_exp(&self) -> &[u8] {
-        RsaKeyBlobPublic::PublicExponent(self)
-    }
-    /// Returns a big-endian multiprecision integer representing the modulus.
-    pub fn modulus(&self) -> &[u8] {
-        RsaKeyBlobPublic::Modulus(self)
-    }
-}
-
-impl TypedBlob<RsaPrivate> {
-        /// Public exponent as a big-endian multiprecision integer.
-        pub fn pub_exp(&self) -> &[u8] {
-            RsaKeyBlobPrivate::PublicExponent(self)
-        }
-        /// Modulus as a big-endian multiprecision integer.
-        pub fn modulus(&self) -> &[u8] {
-            RsaKeyBlobPrivate::Modulus(self)
-        }
-        /// First prime as a big-endian multiprecision integer.
-        pub fn prime_first(&self) -> &[u8] {
-            RsaKeyBlobPrivate::Prime1(self)
-        }
-        /// Second prime as a big-endian multiprecision integer.
-        pub fn prime_second(&self) -> &[u8] {
-            RsaKeyBlobPrivate::Prime2(self)
-        }
-}
-
-impl TypedBlob<RsaFullPrivate> {
-    /// Public exponent as a big-endian multiprecision integer.
-    pub fn pub_exp(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::PublicExponent(self)
-    }
-    /// Modulus as a big-endian multiprecision integer.
-    pub fn modulus(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::Modulus(self)
-    }
-    /// First prime as a big-endian multiprecision integer.
-    pub fn prime_first(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::Prime1(self)
-    }
-    /// Second prime as a big-endian multiprecision integer.
-    pub fn prime_second(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::Prime2(self)
-    }
-    /// First exponent as a big-endian multiprecision integer.
-    pub fn exp_first(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::Exponent1(self)
-    }
-    /// Second exponent as a big-endian multiprecision integer.
-    pub fn exp_second(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::Exponent2(self)
-    }
-    /// Coefficient as a big-endian multiprecision integer.
-    pub fn coeff(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::Coefficient(self)
-    }
-    /// Private exponent as a big-endian multiprecision integer.
-    pub fn priv_exp(&self) -> &[u8] {
-        RsaKeyBlobFullPrivate::PrivateExponent(self)
-    }
-}
+impl EccKeyBlobPublic for TypedBlob<EcdhP256Public> {}
+impl EccKeyBlobPrivate for TypedBlob<EcdhP256Private> {}
+impl EccKeyBlobPublic for TypedBlob<EcdhP384Public> {}
+impl EccKeyBlobPrivate for TypedBlob<EcdhP384Private> {}
+impl EccKeyBlobPublic for TypedBlob<EcdhP521Public> {}
+impl EccKeyBlobPrivate for TypedBlob<EcdhP521Private> {}
+impl EccKeyBlobPublic for TypedBlob<EcdsaP256Public> {}
+impl EccKeyBlobPrivate for TypedBlob<EcdsaP256Private> {}
+impl EccKeyBlobPublic for TypedBlob<EcdsaP384Public> {}
+impl EccKeyBlobPrivate for TypedBlob<EcdsaP384Private> {}
+impl EccKeyBlobPublic for TypedBlob<EcdsaP521Public> {}
+impl EccKeyBlobPrivate for TypedBlob<EcdsaP521Private> {}
 
 trait AsBytes {
     fn as_bytes(&self) -> &[u8];
@@ -333,7 +192,7 @@ macro_rules! dyn_struct {
             $header: ty,
             $(
                 $(#[$meta:meta])*
-                $field: ident [$len: ident],
+                $field: ident [$($len: tt)*],
             )*
         }
     ) => {
@@ -342,7 +201,7 @@ macro_rules! dyn_struct {
             dyn_struct! { ;
                 $(
                     $(#[$meta])*
-                    $field [$len],
+                    $field [$($len)*],
                 )*
             }
         }
@@ -353,10 +212,10 @@ macro_rules! dyn_struct {
     (
         $($prev: ident,)* ;
         $(#[$curr_meta:meta])*
-        $curr: ident [$curr_len: ident],
+        $curr: ident [$($curr_len: tt)*],
         $(
             $(#[$field_meta:meta])*
-            $field: ident [$field_len: ident],
+            $field: ident [$($field_len: tt)*],
         )*
     ) => {
         $(#[$curr_meta])*
@@ -367,60 +226,63 @@ macro_rules! dyn_struct {
             let offset = std::mem::size_of_val(this)
                 $(+ self.$prev().len())*;
 
-            &self.as_bytes()[offset..offset + (this.$curr_len as usize)]
+            let size: usize = dyn_struct! { this, $($curr_len)* };
+
+            &self.as_bytes()[offset..offset + size]
         }
         // Once expanded, push the processed ident and recursively expand other
         // fields
         dyn_struct! { $($prev,)* $curr, ;
             $(
                 $(#[$field_meta])*
-                $field [$field_len],
+                $field [$($field_len)*],
             )*
         }
     };
 
-    ($($prev: ident,)* ; ) => {}
-}
+    ($($prev: ident,)* ; ) => {};
+    // Accept either header member values or arbitrary expressions (e.g. numeric
+    // constants)
+    ($this: expr, $ident: ident) => { $this.$ident as usize };
+    ($this: expr, $expr: expr) => { $expr };
 
+}
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    #[allow(non_snake_case)]
     trait RsaKeyBlobPublic {
         BCRYPT_RSAKEY_BLOB,
-        PublicExponent[cbPublicExp],
-        Modulus[cbModulus],
+        pub_exp[cbPublicExp],
+        modulus[cbModulus],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    #[allow(non_snake_case)]
     trait RsaKeyBlobPrivate {
         BCRYPT_RSAKEY_BLOB,
-        PublicExponent[cbPublicExp],
-        Modulus[cbModulus],
-        Prime1[cbPrime1],
-        Prime2[cbPrime2],
+        pub_exp[cbPublicExp],
+        modulus[cbModulus],
+        prime1[cbPrime1],
+        prime2[cbPrime2],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    #[allow(non_snake_case)]
     trait RsaKeyBlobFullPrivate {
         BCRYPT_RSAKEY_BLOB,
-        PublicExponent[cbPublicExp],
-        Modulus[cbModulus],
-        Prime1[cbPrime1],
-        Prime2[cbPrime2],
-        Exponent1[cbPrime1],
-        Exponent2[cbPrime2],
-        Coefficient[cbPrime1],
-        PrivateExponent[cbModulus],
+        pub_exp[cbPublicExp],
+        modulus[cbModulus],
+        prime1[cbPrime1],
+        prime2[cbPrime2],
+        exponent1[cbPrime1],
+        exponent2[cbPrime2],
+        coeff[cbPrime1],
+        priv_exp[cbModulus],
     }
 }
 
@@ -430,9 +292,9 @@ dyn_struct! {
     #[allow(non_snake_case)]
     trait DhKeyBlobPublic {
         BCRYPT_DH_KEY_BLOB,
-        Modulus[cbKey],
-        Generator[cbKey],
-        Public[cbKey],
+        modulus[cbKey],
+        generator[cbKey],
+        public[cbKey],
     }
 }
 
@@ -442,84 +304,76 @@ dyn_struct! {
     #[allow(non_snake_case)]
     trait DhKeyBlobPrivate {
         BCRYPT_DH_KEY_BLOB,
-        Modulus[cbKey],
-        Generator[cbKey],
-        Public[cbKey],
-        PrivateExponent[cbKey],
+        modulus[cbKey],
+        generator[cbKey],
+        public[cbKey],
+        priv_exp[cbKey],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
-    #[allow(non_snake_case)]
     trait DsaKeyBlobPublic {
         BCRYPT_DSA_KEY_BLOB,
-        Modulus[cbKey],
-        Generator[cbKey],
-        Public[cbKey],
+        modulus[cbKey],
+        generator[cbKey],
+        public[cbKey],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
-    #[allow(non_snake_case)]
     trait DsaKeyBlobPrivate {
         BCRYPT_DSA_KEY_BLOB,
-        Modulus[cbKey],
-        Generator[cbKey],
-        Public[cbKey],
-        // TODO: This is exactly 20 bytes long
-        PrivateExponent[cbKey],
+        modulus[cbKey],
+        generator[cbKey],
+        public[cbKey],
+        priv_exp[20],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
-    #[allow(non_snake_case)]
     trait DsaKeyBlobPublicV2 {
         BCRYPT_DSA_KEY_BLOB_V2,
-        Modulus[cbKey],
-        Generator[cbKey],
-        Public[cbKey],
+        modulus[cbKey],
+        generator[cbKey],
+        public[cbKey],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
-    #[allow(non_snake_case)]
     trait DsaKeyBlobPrivateV2 {
         BCRYPT_DSA_KEY_BLOB_V2,
-        Modulus[cbKey],
-        Generator[cbKey],
-        Public[cbKey],
-        // TODO: This is exactly 20 bytes long
-        PrivateExponent[cbKey],
+        modulus[cbKey],
+        generator[cbKey],
+        public[cbKey],
+        priv_exp[20],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
-    #[allow(non_snake_case)]
     trait EccKeyBlobPublic {
         BCRYPT_ECCKEY_BLOB,
-        X[cbKey],
-        Y[cbKey],
+        x[cbKey],
+        y[cbKey],
     }
 }
 
 dyn_struct! {
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
-    #[allow(non_snake_case)]
     trait EccKeyBlobPrivate {
         BCRYPT_ECCKEY_BLOB,
-        X[cbKey],
-        Y[cbKey],
+        x[cbKey],
+        y[cbKey],
         d[cbKey],
     }
 }
