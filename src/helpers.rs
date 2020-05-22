@@ -352,7 +352,7 @@ impl<T> AsRef<T> for MaybeUnsized<T> {
     }
 }
 
-pub(crate) trait AsBytes {
+pub trait AsBytes {
     fn as_bytes(&self) -> &[u8];
 }
 
@@ -379,7 +379,7 @@ macro_rules! dyn_struct {
         }
     ) => {
         $(#[$outer])*
-        trait $ident: $crate::helpers::AsBytes + AsRef<$header> {
+        pub trait $ident: $crate::helpers::AsBytes + AsRef<$header> {
             dyn_struct! { ;
                 $(
                     $(#[$meta])*

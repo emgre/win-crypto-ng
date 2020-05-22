@@ -133,7 +133,103 @@ impl AsymmetricAlgorithm {
     }
 }
 
+use std::marker::PhantomData;
+
+macro_rules! algo_struct {
+    (pub struct $ident: ident, $algo: expr) => {
+        pub struct $ident {}
+        impl Algo for $ident { const ID: AsymmetricAlgorithmId = $algo; }
+    };
+}
+pub trait Algo {
+    const ID: AsymmetricAlgorithmId;
+}
+algo_struct!(pub struct Dh, AsymmetricAlgorithmId::Dh);
+algo_struct!(pub struct Dsa, AsymmetricAlgorithmId::Dsa);
+algo_struct!(pub struct Ecdh256, AsymmetricAlgorithmId::EcdhP256);
+algo_struct!(pub struct Ecdh384, AsymmetricAlgorithmId::EcdhP384);
+algo_struct!(pub struct Ecdh521, AsymmetricAlgorithmId::EcdhP521);
+algo_struct!(pub struct Ecdsa256, AsymmetricAlgorithmId::EcdsaP256);
+algo_struct!(pub struct Ecdsa384, AsymmetricAlgorithmId::EcdsaP384);
+algo_struct!(pub struct Ecdsa521, AsymmetricAlgorithmId::EcdsaP521);
+algo_struct!(pub struct Rsa, AsymmetricAlgorithmId::Rsa);
+
+pub trait Parts {}
+pub struct Private {}
+impl Parts for Private {}
+pub struct Public {}
+impl Parts for Public {}
+
+pub struct AsymmetricKey<A: Algo,  P: Parts = Public>(KeyHandle, PhantomData<A>, PhantomData<P>);
+
+impl<A: Algo, P: Parts> From<KeyHandle> for AsymmetricKey<A, P> {
+    fn from(handle: KeyHandle) -> Self {
+        Self(handle, PhantomData, PhantomData)
+    }
+}
+
+impl<A: Algo, P: Parts> From<KeyPair> for AsymmetricKey<A, P> {
+    fn from(handle: KeyPair) -> Self {
+        Self(handle.0, PhantomData, PhantomData)
+    }
+}
+
+impl<A: Algo, P: Parts> From<AsymmetricKey<A, P>> for KeyPair {
+    fn from(handle: AsymmetricKey<A, P>) -> Self {
+        KeyPair(handle.0)
+    }
+}
+
+use crate::key::{RsaFullPrivate, RsaPublic};
+
+impl AsymmetricKey<Rsa, Private> {
+    pub fn generate(length: u32) -> Result<Self> {
+        let provider = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa)?;
+        let pair = KeyPair::generate(&provider, length)?.finalize();
+
+        Ok(Self::from(pair.0))
+    }
+
+    pub fn export_public(&self) -> Result<TypedBlob<RsaPublic>> {
+        Ok(KeyPair::export(self.0.handle, BlobType::RsaPublic)?
+            .try_into::<RsaPublic>()
+            .expect("Guaranteed"))
+    }
+
+    /// Attempts to export the key to a given blob type.
+    /// # Example
+    /// ```
+    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
+    /// # use win_crypto_ng::asymmetric::{Algo, Rsa, Private, AsymmetricKey};
+    /// # use win_crypto_ng::key::{BlobType, RsaPublic, RsaPrivate};
+    /// # use win_crypto_ng::key::{RsaKeyBlobFullPrivate, RsaKeyBlobPublic};
+    ///
+    /// let pair = AsymmetricKey::<Rsa, Private>::generate(1024).expect("key to be generated");
+    /// let blob = pair.export_public().unwrap();
+    /// dbg!(blob.as_bytes());
+    ///
+    /// let public = blob;
+    /// let pub_exp = public.pub_exp();
+    /// let modulus = public.modulus();
+    ///
+    /// let private = pair.export_full().unwrap();
+    /// assert_eq!(pub_exp, private.pub_exp());
+    /// assert_eq!(modulus, private.modulus());
+    /// ```
+    pub fn export_full(&self) -> Result<TypedBlob<RsaFullPrivate>> {
+        Ok(KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
+            .try_into::<RsaFullPrivate>()
+            .expect("Guaranteed"))
+    }
+}
+
 pub struct KeyPair(KeyHandle);
+impl KeyPair {
+    pub fn as_raw_handle(&self) -> BCRYPT_KEY_HANDLE {
+        self.0.handle
+    }
+}
+
 pub struct KeyPairBuilder<'a> {
     _provider: &'a AsymmetricAlgorithm,
     handle: BCRYPT_KEY_HANDLE,
@@ -153,36 +249,14 @@ impl KeyPair {
         })
     }
 
-    /// Attempts to export the key to a given blob type.
-    /// # Example
-    /// ```
-    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
-    /// # use win_crypto_ng::key::{BlobType, RsaPublic, RsaPrivate};
-    ///
-    /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
-    /// let pair = KeyPair::generate(&algo, 1024).expect("key to be generated").finalize();
-    ///
-    /// let blob = pair.export(BlobType::RsaPublic).unwrap();
-    /// dbg!(blob.as_bytes());
-    /// eprintln!("{:?}", blob.Magic);
-    /// assert_eq!(blob.Magic, winapi::shared::bcrypt::BCRYPT_RSAPUBLIC_MAGIC);
-    ///
-    /// let public = blob.try_into::<RsaPublic>().unwrap();
-    /// let pub_exp = public.pub_exp();
-    /// let modulus = public.modulus();
-    ///
-    /// let blob = pair.export(BlobType::RsaPrivate).unwrap();
-    /// let private = blob.try_into::<RsaPrivate>().unwrap();
-    /// assert_eq!(pub_exp, private.pub_exp());
-    /// assert_eq!(modulus, private.modulus());
-    /// ```
-    pub fn export(&self, kind: BlobType) -> Result<TypedBlob<BCRYPT_KEY_BLOB>> {
+
+    pub fn export(handle: BCRYPT_KEY_HANDLE, kind: BlobType) -> Result<TypedBlob<BCRYPT_KEY_BLOB>> {
         let property = WindowsString::from_str(kind.as_value());
 
         let mut bytes: ULONG = 0;
         unsafe {
             Error::check(BCryptExportKey(
-                self.0.as_ptr(),
+                handle,
                 null_mut(),
                 property.as_ptr(),
                 null_mut(),
@@ -195,7 +269,7 @@ impl KeyPair {
 
         unsafe {
             Error::check(BCryptExportKey(
-                self.0.as_ptr(),
+                handle,
                 null_mut(),
                 property.as_ptr(),
                 blob.as_mut_ptr(),
