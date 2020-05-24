@@ -2,6 +2,7 @@
 
 use crate::dyn_struct;
 use crate::helpers::{Handle, TypedBlob};
+use std::convert::TryFrom;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::ULONG;
@@ -96,121 +97,182 @@ impl BlobType {
     }
 }
 
-/// Marker trait for values containing CNG key blob types.
-pub trait KeyBlob {
-    const MAGIC: ULONG;
-    type Value;
-}
+impl<'a> TryFrom<&'a str> for BlobType {
+    type Error = &'a str;
 
-macro_rules! newtype_key_blob {
-    ($name: ident, $magic: expr, $value: ty) => {
-        #[repr(transparent)]
-        pub struct $name($value);
-        impl AsRef<$value> for $name {
-            fn as_ref(&self) -> &$value {
-                &self.0
-            }
-        }
-        impl KeyBlob for $name {
-            const MAGIC: ULONG = $magic;
-            type Value = $value;
-        }
-    };
-}
-
-newtype_key_blob!(DhPrivate, BCRYPT_DH_PRIVATE_MAGIC, BCRYPT_DH_KEY_BLOB);
-newtype_key_blob!(DhPublic, BCRYPT_DH_PUBLIC_MAGIC, BCRYPT_DH_KEY_BLOB);
-newtype_key_blob!(DsaPublic, BCRYPT_DSA_PUBLIC_MAGIC, BCRYPT_DSA_KEY_BLOB);
-newtype_key_blob!(DsaPrivate, BCRYPT_DSA_PRIVATE_MAGIC, BCRYPT_DSA_KEY_BLOB);
-newtype_key_blob!(
-    DsaPublicV2,
-    BCRYPT_DSA_PUBLIC_MAGIC_V2,
-    BCRYPT_DSA_KEY_BLOB_V2
-);
-newtype_key_blob!(
-    DsaPrivateV2,
-    BCRYPT_DSA_PRIVATE_MAGIC_V2,
-    BCRYPT_DSA_KEY_BLOB_V2
-);
-newtype_key_blob!(
-    RsaFullPrivate,
-    BCRYPT_RSAFULLPRIVATE_MAGIC,
-    BCRYPT_RSAKEY_BLOB
-);
-newtype_key_blob!(RsaPrivate, BCRYPT_RSAPRIVATE_MAGIC, BCRYPT_RSAKEY_BLOB);
-newtype_key_blob!(RsaPublic, BCRYPT_RSAPUBLIC_MAGIC, BCRYPT_RSAKEY_BLOB);
-newtype_key_blob!(
-    EcdhP256Public,
-    BCRYPT_ECDH_PUBLIC_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdhP256Private,
-    BCRYPT_ECDH_PRIVATE_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdhP384Public,
-    BCRYPT_ECDH_PUBLIC_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdhP384Private,
-    BCRYPT_ECDH_PRIVATE_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdhP521Public,
-    BCRYPT_ECDH_PUBLIC_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdhP521Private,
-    BCRYPT_ECDH_PRIVATE_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdsaP256Public,
-    BCRYPT_ECDSA_PUBLIC_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdsaP256Private,
-    BCRYPT_ECDSA_PRIVATE_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdsaP384Public,
-    BCRYPT_ECDSA_PUBLIC_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdsaP384Private,
-    BCRYPT_ECDSA_PRIVATE_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdsaP521Public,
-    BCRYPT_ECDSA_PUBLIC_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-newtype_key_blob!(
-    EcdsaP521Private,
-    BCRYPT_ECDSA_PRIVATE_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-
-impl TypedBlob<BCRYPT_KEY_BLOB> {
-    pub fn try_into<T: KeyBlob>(self) -> Result<TypedBlob<T>, Self> {
-        if self.Magic == T::MAGIC {
-            Ok(unsafe { TypedBlob::from_box(self.into_inner()) })
-        } else {
-            Err(self)
+    fn try_from(val: &'a str) -> std::result::Result<BlobType, Self::Error> {
+        match val {
+            BCRYPT_AES_WRAP_KEY_BLOB => Ok(BlobType::AesWrapKey),
+            BCRYPT_DH_PRIVATE_BLOB => Ok(BlobType::DhPrivate),
+            BCRYPT_DH_PUBLIC_BLOB => Ok(BlobType::DhPublic),
+            BCRYPT_DSA_PUBLIC_BLOB => Ok(BlobType::DsaPublic),
+            BCRYPT_DSA_PRIVATE_BLOB => Ok(BlobType::DsaPrivate),
+            BCRYPT_ECCPRIVATE_BLOB => Ok(BlobType::EccPrivate),
+            BCRYPT_ECCPUBLIC_BLOB => Ok(BlobType::EccPublic),
+            BCRYPT_KEY_DATA_BLOB => Ok(BlobType::KeyData),
+            BCRYPT_OPAQUE_KEY_BLOB => Ok(BlobType::OpaqueKey),
+            BCRYPT_PUBLIC_KEY_BLOB => Ok(BlobType::PublicKey),
+            BCRYPT_PRIVATE_KEY_BLOB => Ok(BlobType::PrivateKey),
+            BCRYPT_RSAFULLPRIVATE_BLOB => Ok(BlobType::RsaFullPrivate),
+            BCRYPT_RSAPRIVATE_BLOB => Ok(BlobType::RsaPrivate),
+            BCRYPT_RSAPUBLIC_BLOB => Ok(BlobType::RsaPublic),
+            LEGACY_DH_PRIVATE_BLOB => Ok(BlobType::LegacyDhPrivate),
+            LEGACY_DH_PUBLIC_BLOB => Ok(BlobType::LegacyDhPublic),
+            LEGACY_DSA_PRIVATE_BLOB => Ok(BlobType::LegacyDsaPrivate),
+            LEGACY_DSA_PUBLIC_BLOB => Ok(BlobType::LegacyDsaPublic),
+            LEGACY_DSA_V2_PRIVATE_BLOB => Ok(BlobType::LegacyDsaV2Private),
+            LEGACY_RSAPRIVATE_BLOB => Ok(BlobType::LegacyRsaPrivate),
+            LEGACY_RSAPUBLIC_BLOB => Ok(BlobType::LegacyRsaPublic),
+            val => Err(val),
         }
     }
 }
 
-impl RsaKeyBlobPublic for TypedBlob<RsaPublic> {}
+/// Marker trait for values containing CNG key blob types.
+pub trait KeyBlob {
+    const MAGIC: ULONG;
+    const TYPE: &'static str;
+    type Value;
+}
+
+macro_rules! newtype_key_blob {
+    ($($name: ident, $type: expr, $magic: tt, $value: ty),*) => {
+        $(
+            #[repr(transparent)]
+            pub struct $name($value);
+            impl AsRef<$value> for $name {
+                fn as_ref(&self) -> &$value {
+                    &self.0
+                }
+            }
+            impl KeyBlob for $name {
+                const MAGIC: ULONG = $magic;
+                const TYPE: &'static str = $type;
+                type Value = $value;
+            }
+        )*
+
+        impl TypedBlob<BCRYPT_KEY_BLOB> {
+            pub fn to_type(&self) -> Option<BlobType> {
+                match self.Magic {
+                    $($magic => {TryFrom::try_from($type).ok()})*
+                    _ => None,
+                }
+            }
+
+            pub fn try_into<T: KeyBlob>(self) -> Result<TypedBlob<T>, Self> {
+                if self.Magic == T::MAGIC {
+                    // SAFETY: Every specialized key blob struct extends the
+                    // basic "type-erased" BCRYPT_KEY_BLOB - the magic value
+                    // is a discriminant. We trust the documentation on how can
+                    // we reinterpret the blob layout according to its magic.
+                    Ok(unsafe { TypedBlob::from_box(self.into_inner()) })
+                } else {
+                    Err(self)
+                }
+            }
+        }
+        $(
+            impl From<TypedBlob<$name>> for TypedBlob<BCRYPT_KEY_BLOB> {
+                fn from(typed: TypedBlob<$name>) -> Self {
+                    // SAFETY: Every specialized key blob struct extends the
+                    // basic "type-erased" BCRYPT_KEY_BLOB, so it's safe to
+                    // just discard the concrete type
+                    unsafe { TypedBlob::from_box(typed.into_inner()) }
+                }
+            }
+        )*
+    };
+}
+
+newtype_key_blob!(
+    DhPrivate,
+    BCRYPT_DH_PRIVATE_BLOB,
+    BCRYPT_DH_PRIVATE_MAGIC,
+    BCRYPT_DH_KEY_BLOB,
+    DhPublic,
+    BCRYPT_DH_PUBLIC_BLOB,
+    BCRYPT_DH_PUBLIC_MAGIC,
+    BCRYPT_DH_KEY_BLOB,
+    DsaPublic,
+    BCRYPT_DSA_PUBLIC_BLOB,
+    BCRYPT_DSA_PUBLIC_MAGIC,
+    BCRYPT_DSA_KEY_BLOB,
+    DsaPrivate,
+    BCRYPT_DSA_PRIVATE_BLOB,
+    BCRYPT_DSA_PRIVATE_MAGIC,
+    BCRYPT_DSA_KEY_BLOB,
+    DsaPublicV2,
+    BCRYPT_DSA_PUBLIC_BLOB,
+    BCRYPT_DSA_PUBLIC_MAGIC_V2,
+    BCRYPT_DSA_KEY_BLOB_V2,
+    DsaPrivateV2,
+    BCRYPT_DSA_PRIVATE_BLOB,
+    BCRYPT_DSA_PRIVATE_MAGIC_V2,
+    BCRYPT_DSA_KEY_BLOB_V2,
+    RsaFullPrivate,
+    BCRYPT_RSAFULLPRIVATE_BLOB,
+    BCRYPT_RSAFULLPRIVATE_MAGIC,
+    BCRYPT_RSAKEY_BLOB,
+    RsaPrivate,
+    BCRYPT_RSAPRIVATE_BLOB,
+    BCRYPT_RSAPRIVATE_MAGIC,
+    BCRYPT_RSAKEY_BLOB,
+    RsaPublic,
+    BCRYPT_RSAPUBLIC_BLOB,
+    BCRYPT_RSAPUBLIC_MAGIC,
+    BCRYPT_RSAKEY_BLOB,
+    EcdhP256Public,
+    BCRYPT_ECCPUBLIC_BLOB,
+    BCRYPT_ECDH_PUBLIC_P256_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdhP256Private,
+    BCRYPT_ECCPRIVATE_BLOB,
+    BCRYPT_ECDH_PRIVATE_P256_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdhP384Public,
+    BCRYPT_ECCPUBLIC_BLOB,
+    BCRYPT_ECDH_PUBLIC_P384_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdhP384Private,
+    BCRYPT_ECCPRIVATE_BLOB,
+    BCRYPT_ECDH_PRIVATE_P384_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdhP521Public,
+    BCRYPT_ECCPUBLIC_BLOB,
+    BCRYPT_ECDH_PUBLIC_P521_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdhP521Private,
+    BCRYPT_ECCPRIVATE_BLOB,
+    BCRYPT_ECDH_PRIVATE_P521_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdsaP256Public,
+    BCRYPT_ECCPUBLIC_BLOB,
+    BCRYPT_ECDSA_PUBLIC_P256_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdsaP256Private,
+    BCRYPT_ECCPRIVATE_BLOB,
+    BCRYPT_ECDSA_PRIVATE_P256_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdsaP384Public,
+    BCRYPT_ECCPUBLIC_BLOB,
+    BCRYPT_ECDSA_PUBLIC_P384_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdsaP384Private,
+    BCRYPT_ECCPRIVATE_BLOB,
+    BCRYPT_ECDSA_PRIVATE_P384_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdsaP521Public,
+    BCRYPT_ECCPUBLIC_BLOB,
+    BCRYPT_ECDSA_PUBLIC_P521_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdsaP521Private,
+    BCRYPT_ECCPRIVATE_BLOB,
+    BCRYPT_ECDSA_PRIVATE_P521_MAGIC,
+    BCRYPT_ECCKEY_BLOB
+);
+
+impl RsaKeyPublicView for TypedBlob<RsaPublic> {}
 impl RsaKeyBlobPrivate for TypedBlob<RsaPrivate> {}
 impl RsaKeyBlobFullPrivate for TypedBlob<RsaFullPrivate> {}
 impl DsaKeyBlobPublic for TypedBlob<DsaPublic> {}
@@ -233,9 +295,10 @@ impl EccKeyBlobPublic for TypedBlob<EcdsaP521Public> {}
 impl EccKeyBlobPrivate for TypedBlob<EcdsaP521Private> {}
 
 dyn_struct! {
+    struct RsaKeyPublicBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    trait RsaKeyBlobPublic {
+    trait RsaKeyPublicView {
         BCRYPT_RSAKEY_BLOB,
         pub_exp[cbPublicExp],
         modulus[cbModulus],
@@ -243,6 +306,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct RsaKeyPrivateBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
     trait RsaKeyBlobPrivate {
@@ -255,6 +319,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct RsaKeyFullPrivateBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
     trait RsaKeyBlobFullPrivate {
@@ -271,6 +336,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct DhKeyPublicBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
     #[allow(non_snake_case)]
@@ -283,6 +349,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct DhKeyPrivateBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
     #[allow(non_snake_case)]
@@ -296,6 +363,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct DsaKeyPublicBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
     trait DsaKeyBlobPublic {
@@ -307,6 +375,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct DsaKeyPrivateBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
     trait DsaKeyBlobPrivate {
@@ -319,6 +388,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct DsaKeyPublicV2Blob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
     trait DsaKeyBlobPublicV2 {
@@ -330,6 +400,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct DsaKeyPrivateV2Blob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
     trait DsaKeyBlobPrivateV2 {
@@ -342,6 +413,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct EccKeyPublicBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
     trait EccKeyBlobPublic {
@@ -352,6 +424,7 @@ dyn_struct! {
 }
 
 dyn_struct! {
+    struct EccKeyPrivateBlob,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
     trait EccKeyBlobPrivate {

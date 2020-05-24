@@ -31,6 +31,9 @@ pub enum Error {
     NotSupported,
     AuthTagMismatch,
     InvalidBufferSize,
+    Unsuccessful,
+
+    BadData,
 
     Unknown(NTSTATUS),
 }
@@ -55,6 +58,8 @@ impl Error {
             ntstatus::STATUS_NOT_SUPPORTED => Err(Error::NotSupported),
             ntstatus::STATUS_AUTH_TAG_MISMATCH => Err(Error::AuthTagMismatch),
             ntstatus::STATUS_INVALID_BUFFER_SIZE => Err(Error::InvalidBufferSize),
+            winapi::shared::winerror::NTE_BAD_DATA => Err(Error::BadData),
+            ntstatus::STATUS_UNSUCCESSFUL => Err(Error::Unsuccessful),
             value => Err(Error::Unknown(value)),
         }
     }

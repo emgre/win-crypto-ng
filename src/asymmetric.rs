@@ -10,11 +10,14 @@
 use crate::helpers::{AlgoHandle, Handle, TypedBlob, WindowsString};
 use crate::key::{BlobType, KeyHandle};
 use crate::property::AlgorithmName;
-use crate::{Error, Result};
+use crate::Result;
 use std::convert::TryFrom;
-use std::ptr::null_mut;
+use std::marker::PhantomData;
 use winapi::shared::bcrypt::*;
-use winapi::shared::ntdef::ULONG;
+
+use builder::KeyPair;
+
+pub mod builder;
 
 /// Asymmetric algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
@@ -62,7 +65,7 @@ pub enum AsymmetricAlgorithmId {
 }
 
 impl AsymmetricAlgorithmId {
-    fn to_str(&self) -> &str {
+    pub fn to_str(&self) -> &str {
         match self {
             Self::Dh => BCRYPT_DH_ALGORITHM,
             Self::Dsa => BCRYPT_DSA_ALGORITHM,
@@ -73,6 +76,36 @@ impl AsymmetricAlgorithmId {
             Self::EcdsaP384 => BCRYPT_ECDSA_P384_ALGORITHM,
             Self::EcdsaP521 => BCRYPT_ECDSA_P521_ALGORITHM,
             Self::Rsa => BCRYPT_RSA_ALGORITHM,
+        }
+    }
+
+    pub fn key_bits(&self) -> Option<u32> {
+        match self {
+            AsymmetricAlgorithmId::EcdhP256 => Some(256),
+            AsymmetricAlgorithmId::EcdhP384 => Some(384),
+            AsymmetricAlgorithmId::EcdhP521 => Some(521),
+            AsymmetricAlgorithmId::EcdsaP256 => Some(256),
+            AsymmetricAlgorithmId::EcdsaP384 => Some(384),
+            AsymmetricAlgorithmId::EcdsaP521 => Some(521),
+            _ => None,
+        }
+    }
+
+    pub fn is_key_bits_supported(&self, key_bits: u32) -> bool {
+        match (self, key_bits, key_bits % 64) {
+            | (AsymmetricAlgorithmId::Dh, 512..=4096, 0)
+            | (AsymmetricAlgorithmId::Rsa, 512..=16384, 0)
+            // Prior to Windows 8, only values <= 1024 are supported,
+            // after that it's <= 3072.
+            // TODO: Check version using winapi::um::winbase::VerifyVersionInfoW
+            | (AsymmetricAlgorithmId::Dsa, 512..=3072, ..)
+            | (AsymmetricAlgorithmId::EcdhP256, 256, ..)
+            | (AsymmetricAlgorithmId::EcdhP384, 384, ..)
+            | (AsymmetricAlgorithmId::EcdhP521, 521, ..)
+            | (AsymmetricAlgorithmId::EcdsaP256, 256, ..)
+            | (AsymmetricAlgorithmId::EcdsaP384, 384, ..)
+            | (AsymmetricAlgorithmId::EcdsaP521, 521, ..) => true,
+            _ => false,
         }
     }
 }
@@ -133,27 +166,31 @@ impl AsymmetricAlgorithm {
     }
 }
 
-use std::marker::PhantomData;
+/// Marker trait for an asymmetric algorithm.
+pub trait Algorithm {
+    fn id(&self) -> AsymmetricAlgorithmId;
+}
 
 macro_rules! algo_struct {
     (pub struct $ident: ident, $algo: expr) => {
-        pub struct $ident {}
-        impl Algo for $ident {
-            const ID: AsymmetricAlgorithmId = $algo;
+        pub struct $ident;
+        impl Algorithm for $ident {
+            #[inline(always)]
+            fn id(&self) -> AsymmetricAlgorithmId {
+                $algo
+            }
         }
     };
 }
-pub trait Algo {
-    const ID: AsymmetricAlgorithmId;
-}
+
 algo_struct!(pub struct Dh, AsymmetricAlgorithmId::Dh);
 algo_struct!(pub struct Dsa, AsymmetricAlgorithmId::Dsa);
-algo_struct!(pub struct Ecdh256, AsymmetricAlgorithmId::EcdhP256);
-algo_struct!(pub struct Ecdh384, AsymmetricAlgorithmId::EcdhP384);
-algo_struct!(pub struct Ecdh521, AsymmetricAlgorithmId::EcdhP521);
-algo_struct!(pub struct Ecdsa256, AsymmetricAlgorithmId::EcdsaP256);
-algo_struct!(pub struct Ecdsa384, AsymmetricAlgorithmId::EcdsaP384);
-algo_struct!(pub struct Ecdsa521, AsymmetricAlgorithmId::EcdsaP521);
+algo_struct!(pub struct EcdhP256, AsymmetricAlgorithmId::EcdhP256);
+algo_struct!(pub struct EcdhP384, AsymmetricAlgorithmId::EcdhP384);
+algo_struct!(pub struct EcdhP521, AsymmetricAlgorithmId::EcdhP521);
+algo_struct!(pub struct EcdsaP256, AsymmetricAlgorithmId::EcdsaP256);
+algo_struct!(pub struct EcdsaP384, AsymmetricAlgorithmId::EcdsaP384);
+algo_struct!(pub struct EcdsaP521, AsymmetricAlgorithmId::EcdsaP521);
 algo_struct!(pub struct Rsa, AsymmetricAlgorithmId::Rsa);
 
 pub trait Parts {}
@@ -162,34 +199,65 @@ impl Parts for Private {}
 pub struct Public {}
 impl Parts for Public {}
 
-pub struct AsymmetricKey<A: Algo, P: Parts = Public>(KeyHandle, PhantomData<A>, PhantomData<P>);
-
-impl<A: Algo, P: Parts> From<KeyHandle> for AsymmetricKey<A, P> {
-    fn from(handle: KeyHandle) -> Self {
-        Self(handle, PhantomData, PhantomData)
+impl Algorithm for AsymmetricAlgorithmId {
+    fn id(&self) -> AsymmetricAlgorithmId {
+        *self
     }
 }
 
-impl<A: Algo, P: Parts> From<KeyPair> for AsymmetricKey<A, P> {
-    fn from(handle: KeyPair) -> Self {
-        Self(handle.0, PhantomData, PhantomData)
+pub struct AsymmetricKey<A: Algorithm = AsymmetricAlgorithmId, P: Parts = Public>(
+    KeyHandle,
+    A,
+    PhantomData<P>,
+);
+
+impl AsymmetricKey {
+    pub fn id(&self) -> AsymmetricAlgorithmId {
+        Algorithm::id(&self.1)
     }
 }
 
-impl<A: Algo, P: Parts> From<AsymmetricKey<A, P>> for KeyPair {
-    fn from(handle: AsymmetricKey<A, P>) -> Self {
-        KeyPair(handle.0)
+impl<A: Algorithm, P: Parts> AsymmetricKey<A, P> {
+    pub fn into_handle(self) -> KeyHandle {
+        self.0
+    }
+}
+
+impl<A: Algorithm, P: Parts> From<(KeyHandle, A)> for AsymmetricKey<A, P> {
+    fn from(handle: (KeyHandle, A)) -> Self {
+        Self(handle.0, handle.1, PhantomData)
     }
 }
 
 use crate::key::{RsaFullPrivate, RsaPublic};
 
 impl AsymmetricKey<Rsa, Private> {
-    pub fn generate(length: u32) -> Result<Self> {
-        let provider = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa)?;
-        let pair = KeyPair::generate(&provider, length)?.finalize();
+    ///
+    /// ```
+    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
+    /// # use win_crypto_ng::asymmetric::{Algorithm, Rsa, Private, AsymmetricKey};
+    /// # use win_crypto_ng::key::{BlobType, RsaPublic, RsaPrivate};
+    /// # use win_crypto_ng::key::{RsaKeyBlobFullPrivate, RsaKeyPublicView};
+    ///
+    /// let pair = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
+    /// let blob = pair.export_full().unwrap();
+    /// let (modulus, prime1) = (blob.modulus().to_owned(), blob.prime1().to_owned());
+    ///
+    /// let provider = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
+    /// let imported = AsymmetricKey::<Rsa, Private>::import(&provider, blob).unwrap();
+    /// let imported_blob = imported.export_full().unwrap();
+    /// assert_eq!(modulus, imported_blob.modulus());
+    /// assert_eq!(prime1, imported_blob.prime1());
+    /// ```
+    pub fn import(
+        provider: &AsymmetricAlgorithm,
+        blob: TypedBlob<crate::key::RsaFullPrivate>,
+    ) -> Result<Self> {
+        if provider.id()? != AsymmetricAlgorithmId::Rsa {
+            return Err(crate::Error::InvalidParameter);
+        };
 
-        Ok(Self::from(pair.0))
+        KeyPair::import(provider, blob.into(), true).map(|pair| Self::from((pair.0, Rsa)))
     }
 
     pub fn export_public(&self) -> Result<TypedBlob<RsaPublic>> {
@@ -201,12 +269,12 @@ impl AsymmetricKey<Rsa, Private> {
     /// Attempts to export the key to a given blob type.
     /// # Example
     /// ```
-    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
-    /// # use win_crypto_ng::asymmetric::{Algo, Rsa, Private, AsymmetricKey};
+    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
+    /// # use win_crypto_ng::asymmetric::{Algorithm, Rsa, Private, AsymmetricKey};
     /// # use win_crypto_ng::key::{BlobType, RsaPublic, RsaPrivate};
-    /// # use win_crypto_ng::key::{RsaKeyBlobFullPrivate, RsaKeyBlobPublic};
+    /// # use win_crypto_ng::key::{RsaKeyBlobFullPrivate, RsaKeyPublicView};
     ///
-    /// let pair = AsymmetricKey::<Rsa, Private>::generate(1024).expect("key to be generated");
+    /// let pair = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
     /// let blob = pair.export_public().unwrap();
     /// dbg!(blob.as_bytes());
     ///
@@ -225,81 +293,94 @@ impl AsymmetricKey<Rsa, Private> {
     }
 }
 
-pub struct KeyPair(KeyHandle);
-impl KeyPair {
-    pub fn as_raw_handle(&self) -> BCRYPT_KEY_HANDLE {
-        self.0.handle
+trait Import<A: Algorithm, P: Parts> {
+    type Blob: Into<TypedBlob<BCRYPT_KEY_BLOB>>;
+    fn import(
+        algo: A,
+        provider: &AsymmetricAlgorithm,
+        blob: Self::Blob,
+    ) -> Result<AsymmetricKey<A, P>> {
+        if provider.id()? != algo.id() {
+            return Err(crate::Error::InvalidParameter);
+        };
+
+        KeyPair::import(provider, blob.into(), true)
+            .map(|pair| AsymmetricKey::<A, P>::from((pair.0, algo)))
     }
 }
 
-pub struct KeyPairBuilder<'a> {
-    _provider: &'a AsymmetricAlgorithm,
-    handle: BCRYPT_KEY_HANDLE,
-}
-
-impl KeyPair {
-    pub fn generate(provider: &AsymmetricAlgorithm, length: u32) -> Result<KeyPairBuilder> {
-        let mut handle: BCRYPT_KEY_HANDLE = null_mut();
-
-        crate::Error::check(unsafe {
-            BCryptGenerateKeyPair(provider.handle.as_ptr(), &mut handle, length as ULONG, 0)
-        })?;
-
-        Ok(KeyPairBuilder {
-            _provider: provider,
-            handle,
-        })
-    }
-
-    pub fn export(handle: BCRYPT_KEY_HANDLE, kind: BlobType) -> Result<TypedBlob<BCRYPT_KEY_BLOB>> {
-        let property = WindowsString::from_str(kind.as_value());
-
-        let mut bytes: ULONG = 0;
-        unsafe {
-            Error::check(BCryptExportKey(
-                handle,
-                null_mut(),
-                property.as_ptr(),
-                null_mut(),
-                0,
-                &mut bytes,
-                0,
-            ))?;
+macro_rules! import_blobs {
+    ($(($algorithm: ident, $parts: ident, $blob: ty)),*$(,)?) => {
+        $(
+        impl Import<$algorithm, $parts> for AsymmetricKey<$algorithm, $parts> {
+            type Blob = $blob;
         }
-        let mut blob = vec![0u8; bytes as usize].into_boxed_slice();
+        )*
+    };
+}
 
-        unsafe {
-            Error::check(BCryptExportKey(
-                handle,
-                null_mut(),
-                property.as_ptr(),
-                blob.as_mut_ptr(),
-                bytes,
-                &mut bytes,
-                0,
-            ))?;
+use crate::key::*;
+
+enum DsaPublicBlob {
+    V1(TypedBlob<DsaPublic>),
+    V2(TypedBlob<DsaPublicV2>),
+}
+
+impl Into<TypedBlob<BCRYPT_KEY_BLOB>> for DsaPublicBlob {
+    fn into(self) -> TypedBlob<BCRYPT_KEY_BLOB> {
+        match self {
+            DsaPublicBlob::V1(v1) => v1.into(),
+            DsaPublicBlob::V2(v2) => v2.into(),
         }
-
-        Ok(unsafe { TypedBlob::from_box(blob) })
     }
 }
 
-impl KeyPairBuilder<'_> {
-    /// # Examples
-    /// ```
-    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, KeyPair};
-    ///
-    /// let algo = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
-    /// let pair = KeyPair::generate(&algo, 1024).expect("key to be generated").finalize();
-    /// assert!(KeyPair::generate(&algo, 1023).is_err(), "key length is invalid");
-    /// ```
-    pub fn finalize(self) -> KeyPair {
-        Error::check(unsafe { BCryptFinalizeKeyPair(self.handle, 0) })
-            .map(|_| {
-                KeyPair(KeyHandle {
-                    handle: self.handle,
-                })
-            })
-            .expect("internal library error")
+enum DsaPrivateBlob {
+    V1(TypedBlob<DsaPrivate>),
+    V2(TypedBlob<DsaPrivateV2>),
+}
+
+impl Into<TypedBlob<BCRYPT_KEY_BLOB>> for DsaPrivateBlob {
+    fn into(self) -> TypedBlob<BCRYPT_KEY_BLOB> {
+        match self {
+            DsaPrivateBlob::V1(v1) => v1.into(),
+            DsaPrivateBlob::V2(v2) => v2.into(),
+        }
+    }
+}
+
+import_blobs!(
+    (Dh, Public, TypedBlob<DhPublic>),
+    (Dh, Private, TypedBlob<DhPrivate>),
+    (Dsa, Public, DsaPublicBlob),
+    (Dsa, Private, DsaPrivateBlob),
+    (EcdhP256, Public, TypedBlob<EcdhP256Public>),
+    (EcdhP256, Private, TypedBlob<EcdhP256Private>),
+    (EcdhP384, Public, TypedBlob<EcdhP384Public>),
+    (EcdhP384, Private, TypedBlob<EcdhP384Private>),
+    (EcdhP521, Public, TypedBlob<EcdhP521Public>),
+    (EcdhP521, Private, TypedBlob<EcdhP521Private>),
+    (EcdsaP256, Public, TypedBlob<EcdsaP256Public>),
+    (EcdsaP256, Private, TypedBlob<EcdsaP256Private>),
+    (EcdsaP384, Public, TypedBlob<EcdsaP384Public>),
+    (EcdsaP384, Private, TypedBlob<EcdsaP384Private>),
+    (EcdsaP521, Public, TypedBlob<EcdsaP521Public>),
+    (EcdsaP521, Private, TypedBlob<EcdsaP521Private>),
+    (Rsa, Public, TypedBlob<RsaPublic>),
+    (Rsa, Private, TypedBlob<RsaPrivate>),
+);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn import() {
+        let generated = AsymmetricKey::builder(Rsa).key_bits(1024).build();
+        let provider = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
+
+        // let blob =
+        // let imported = AsymmetricKey::import(&provider, blob: TypedBlob<crate::key::RsaPrivate>)
+        panic!();
     }
 }

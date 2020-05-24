@@ -111,3 +111,15 @@ impl Property for ObjectLength {
     const IDENTIFIER: &'static str = bcrypt::BCRYPT_OBJECT_LENGTH;
     type Value = DWORD;
 }
+
+pub enum DsaParameters {}
+impl Property for DsaParameters {
+    const IDENTIFIER: &'static str = bcrypt::BCRYPT_DSA_PARAMETERS;
+    type Value = [u8];
+}
+
+pub enum DhParameters {}
+impl Property for DhParameters {
+    const IDENTIFIER: &'static str = bcrypt::BCRYPT_DH_PARAMETERS;
+    type Value = [u8];
+}

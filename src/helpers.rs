@@ -26,6 +26,19 @@ pub trait Handle {
         }
     }
 
+    fn set_property_dyn(&self, property: &str, value: &[u8]) -> Result<()> {
+        let property = WindowsString::from_str(property);
+        unsafe {
+            Error::check(BCryptSetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                value as *const _ as PUCHAR,
+                value.len() as ULONG,
+                0,
+            ))
+        }
+    }
+
     fn get_property<T: Property>(&self) -> Result<MaybeUnsized<T::Value>>
     where
         T::Value: Sized,
@@ -374,6 +387,7 @@ impl<T: ?Sized> AsBytes for TypedBlob<T> {
 #[macro_export]
 macro_rules! dyn_struct {
     (
+        struct $struct_ident: ident,
         $(#[$outer:meta])*
         trait $ident: ident {
             $header: ty,
@@ -392,6 +406,16 @@ macro_rules! dyn_struct {
                 )*
             }
         }
+
+        #[repr(transparent)]
+        pub struct $struct_ident($header);
+        impl AsRef<$header> for $struct_ident {
+            fn as_ref(&self) -> &$header {
+                &self.0
+            }
+        }
+
+        impl $ident for TypedBlob<$struct_ident> {}
     };
     // Expand fields. Recursively expand each field, pushing the processed field
     //  identifier to a queue which is later used to calculate field offset for
@@ -480,6 +504,7 @@ mod tests {
         #[repr(C)]
         struct MyDynStruct([u8; 12]);
         dyn_struct! {
+            struct MyDynStructBlob,
             trait MyDynStructView {
                 MyHeader,
                 field1[count],
