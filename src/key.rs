@@ -150,6 +150,22 @@ macro_rules! newtype_key_blob {
                 const TYPE: &'static str = $type;
                 type Value = $value;
             }
+
+            impl TryFrom<TypedBlob<BCRYPT_KEY_BLOB>> for TypedBlob<$name> {
+                type Error = TypedBlob<BCRYPT_KEY_BLOB>;
+                fn try_from(value: TypedBlob<BCRYPT_KEY_BLOB>) -> Result<Self, Self::Error> {
+                    if value.Magic == <$name as KeyBlob>::MAGIC {
+                        // SAFETY: Every specialized key blob struct extends the
+                        // basic "type-erased" BCRYPT_KEY_BLOB - the magic value
+                        // is a discriminant. We trust the documentation on how
+                        // can we reinterpret the blob layout according to its
+                        // magic.
+                        Ok(unsafe { TypedBlob::from_box(value.into_inner()) })
+                    } else {
+                        Err(value)
+                    }
+                }
+            }
         )*
 
         impl TypedBlob<BCRYPT_KEY_BLOB> {
@@ -159,29 +175,16 @@ macro_rules! newtype_key_blob {
                     _ => None,
                 }
             }
+        }
 
-            pub fn try_into<T: KeyBlob>(self) -> Result<TypedBlob<T>, Self> {
-                if self.Magic == T::MAGIC {
-                    // SAFETY: Every specialized key blob struct extends the
-                    // basic "type-erased" BCRYPT_KEY_BLOB - the magic value
-                    // is a discriminant. We trust the documentation on how can
-                    // we reinterpret the blob layout according to its magic.
-                    Ok(unsafe { TypedBlob::from_box(self.into_inner()) })
-                } else {
-                    Err(self)
-                }
+        impl<T: KeyBlob> From<TypedBlob<T>> for TypedBlob<BCRYPT_KEY_BLOB> {
+            fn from(typed: TypedBlob<T>) -> Self {
+                // SAFETY: Every specialized key blob struct extends the
+                // basic "type-erased" BCRYPT_KEY_BLOB, so it's safe to
+                // just discard the concrete type
+                unsafe { TypedBlob::from_box(typed.into_inner()) }
             }
         }
-        $(
-            impl From<TypedBlob<$name>> for TypedBlob<BCRYPT_KEY_BLOB> {
-                fn from(typed: TypedBlob<$name>) -> Self {
-                    // SAFETY: Every specialized key blob struct extends the
-                    // basic "type-erased" BCRYPT_KEY_BLOB, so it's safe to
-                    // just discard the concrete type
-                    unsafe { TypedBlob::from_box(typed.into_inner()) }
-                }
-            }
-        )*
     };
 }
 
@@ -222,6 +225,14 @@ newtype_key_blob!(
     BCRYPT_RSAPUBLIC_BLOB,
     BCRYPT_RSAPUBLIC_MAGIC,
     BCRYPT_RSAKEY_BLOB,
+    EcdhPublic,
+    BCRYPT_ECCPUBLIC_BLOB,
+    BCRYPT_ECDH_PUBLIC_GENERIC_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
+    EcdhPrivate,
+    BCRYPT_ECCPRIVATE_BLOB,
+    BCRYPT_ECDH_PRIVATE_GENERIC_MAGIC,
+    BCRYPT_ECCKEY_BLOB,
     EcdhP256Public,
     BCRYPT_ECCPUBLIC_BLOB,
     BCRYPT_ECDH_PUBLIC_P256_MAGIC,
@@ -281,6 +292,8 @@ impl DsaKeyBlobPublicV2 for TypedBlob<DsaPublicV2> {}
 impl DsaKeyBlobPrivateV2 for TypedBlob<DsaPrivateV2> {}
 impl DhKeyBlobPublic for TypedBlob<DhPublic> {}
 impl DhKeyBlobPrivate for TypedBlob<DhPrivate> {}
+impl EccKeyBlobPublic for TypedBlob<EcdhPublic> {}
+impl EccKeyBlobPrivate for TypedBlob<EcdhPrivate> {}
 impl EccKeyBlobPublic for TypedBlob<EcdhP256Public> {}
 impl EccKeyBlobPrivate for TypedBlob<EcdhP256Private> {}
 impl EccKeyBlobPublic for TypedBlob<EcdhP384Public> {}

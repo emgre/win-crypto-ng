@@ -55,6 +55,12 @@ impl Property for ChainingMode {
     type Value = [WCHAR];
 }
 
+pub enum EccCurveName {}
+impl Property for EccCurveName {
+    const IDENTIFIER: &'static str = bcrypt::BCRYPT_ECC_CURVE_NAME;
+    type Value = [WCHAR];
+}
+
 /// [**BCRYPT_HASH_LENGTH**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_HASH_LENGTH)
 ///
 /// `L"HashDigestLength"`

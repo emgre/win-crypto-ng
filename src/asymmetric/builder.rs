@@ -8,8 +8,9 @@ use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::ULONG;
 
+use super::ecc::Curve;
 use super::{Algorithm, AsymmetricAlgorithm, AsymmetricAlgorithmId, AsymmetricKey, Private};
-use super::{Dh, Dsa, EcdhP256, EcdhP384, EcdhP521, EcdsaP256, EcdsaP384, EcdsaP521, Rsa};
+use super::{Dh, Dsa, Ecdh, Ecdsa, Rsa};
 
 impl AsymmetricKey {
     pub fn builder<B: Algorithm>(algorithm: B) -> Builder<B> {
@@ -97,16 +98,11 @@ pub struct BuilderWithKeyBits<A: Algorithm, C: KeyConstraint = NoConstraint> {
 }
 
 /// Marker trait implemented for algorithms that do not require explicitly
-/// providing key size in bits (and, by extension, other parameters). For
-/// example, for [`EcdhP384`] we always know the key size is 384 bits.
+/// providing key size in bits (and, by extension, other parameters).
 pub trait NotNeedsKeySize: Algorithm {}
 impl NotNeedsKeySize for AsymmetricAlgorithmId {}
-impl NotNeedsKeySize for EcdhP256 {}
-impl NotNeedsKeySize for EcdhP384 {}
-impl NotNeedsKeySize for EcdhP521 {}
-impl NotNeedsKeySize for EcdsaP256 {}
-impl NotNeedsKeySize for EcdsaP384 {}
-impl NotNeedsKeySize for EcdsaP521 {}
+impl<C: Curve> NotNeedsKeySize for Ecdh<C> {}
+impl<C: Curve> NotNeedsKeySize for Ecdsa<C> {}
 /// Marker trait implemented for algorithms that require explicitly providing
 /// key size in bits to be generated.
 pub trait NeedsKeySize: Algorithm {}
@@ -130,6 +126,26 @@ impl BuilderWithKeyBits<AsymmetricAlgorithmId> {
 
 impl BuilderWithKeyBits<Dh> {
     pub fn with_params(self, params: DhParams) -> BuilderWithParams<Dh, DhParams> {
+        BuilderWithParams {
+            algorithm: self.algorithm,
+            key_bits: self.key_bits,
+            params,
+        }
+    }
+}
+
+impl<C: super::Curve> BuilderWithKeyBits<Ecdh<C>> {
+    pub fn with_params(self, params: ()) -> BuilderWithParams<Ecdh<C>> {
+        BuilderWithParams {
+            algorithm: self.algorithm,
+            key_bits: self.key_bits,
+            params,
+        }
+    }
+}
+
+impl<C: super::Curve> BuilderWithKeyBits<Ecdsa<C>> {
+    pub fn with_params(self, params: ()) -> BuilderWithParams<Ecdsa<C>> {
         BuilderWithParams {
             algorithm: self.algorithm,
             key_bits: self.key_bits,
@@ -580,7 +596,9 @@ mod tests {
     ];
 
     #[test]
-    fn lol() -> Result<()> {
+    fn builds() -> Result<()> {
+        use crate::asymmetric::ecc::{NistP384, NistP521};
+
         let id = AsymmetricAlgorithmId::Rsa;
         assert!(AsymmetricKey::builder(id).key_bits(512).build().is_ok());
         assert!(AsymmetricKey::builder(id).key_bits(1024).build().is_ok());
@@ -589,8 +607,8 @@ mod tests {
 
         assert!(AsymmetricKey::builder(Rsa).key_bits(1024).build().is_ok());
         assert!(AsymmetricKey::builder(Dsa).key_bits(1024).build().is_ok());
-        assert!(AsymmetricKey::builder(EcdsaP521).build().is_ok());
-        assert!(AsymmetricKey::builder(EcdhP384).build().is_ok());
+        assert!(AsymmetricKey::builder(Ecdsa(NistP521)).build().is_ok());
+        assert!(AsymmetricKey::builder(Ecdh(NistP384)).build().is_ok());
 
         let (generator, modulus) = (OAKLEY_GROUP_1_G.to_vec(), OAKLEY_GROUP_1_P.to_vec());
         AsymmetricKey::builder(Dh)
