@@ -1,13 +1,16 @@
 use crate::property::Property;
 use crate::{Error, Result};
 use std::ffi::{OsStr, OsString};
-use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::ops::Deref;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, VOID};
+
+pub mod bytes;
+pub use bytes::{AsBytes, FromBytes};
+pub mod dyn_struct;
+pub use dyn_struct::DynStruct;
 
 pub trait Handle {
     fn as_ptr(&self) -> BCRYPT_HANDLE;
@@ -80,11 +83,11 @@ pub trait Handle {
             // allocate
             assert_eq!(result.len(), size as usize);
 
-            MaybeUnsized::Unsized(unsafe { TypedBlob::from_box(result) })
+            MaybeUnsized::Unsized(FromBytes::from_boxed(result))
         })
     }
 
-    fn get_property_unsized<T: Property>(&self) -> Result<TypedBlob<T::Value>> {
+    fn get_property_unsized<T: Property>(&self) -> Result<Box<T::Value>> {
         let property = WindowsString::from_str(T::IDENTIFIER);
 
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
@@ -101,7 +104,7 @@ pub trait Handle {
             ))?;
         }
 
-        Ok(unsafe { TypedBlob::from_box_unsized(result) })
+        Ok(FromBytes::from_boxed(result))
     }
 }
 
@@ -213,146 +216,12 @@ impl ToString for WindowsString {
     }
 }*/
 
-/// A typed view into an opaque blob of heap-allocated bytes.
-pub struct TypedBlob<T: ?Sized> {
-    allocation: Box<[u8]>,
-    marker: PhantomData<T>,
-}
-
-impl<T: ?Sized> std::fmt::Debug for TypedBlob<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "TypedBlob({}, {:?})",
-            std::any::type_name::<T>(),
-            self.allocation
-        )
-    }
-}
-
-impl<T: ?Sized> Into<Box<[u8]>> for TypedBlob<T> {
-    fn into(self) -> Box<[u8]> {
-        self.allocation
-    }
-}
-
-#[allow(dead_code)]
-impl<T: ?Sized> TypedBlob<T> {
-    pub fn into_inner(self) -> Box<[u8]> {
-        self.into()
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.allocation
-    }
-}
-
-impl<T: Sized> Deref for TypedBlob<T> {
-    type Target = T;
-
-    /// Creates a typed reference to the underlying data structure backed by the
-    /// source bytes.
-    fn deref(&self) -> &T {
-        // SAFETY: The only way to create this struct with sized `T` is via
-        // `TypedBlob::from_box`, where:
-        // 1. the caller has to prove that the data is of correct format,
-        // 2. we check that the resulting reference will be well-aligned, and
-        // 3. the allocation is big enough to hold a value of type `T`.
-        unsafe { &*(self.allocation.as_ptr() as *const T) }
-    }
-}
-
-impl<T, U: AsRef<T>> AsRef<T> for TypedBlob<U> {
-    fn as_ref(&self) -> &T {
-        self.deref().as_ref()
-    }
-}
-
-#[allow(dead_code)]
-impl<T: Sized> TypedBlob<T> {
-    /// Converts an opaque blob of bytes into a typed blob asserting that the
-    /// raw bytes correspond in shape to value of type `T`.
-    ///
-    /// # Panics
-    /// This function panicks if the allocation is not big enough to hold a
-    /// value of type `T` or if the backing pointee alignment is not compatible
-    /// with that of `T`.
-    pub unsafe fn from_box(allocation: Box<[u8]>) -> Self {
-        assert!(allocation.len() >= std::mem::size_of::<T>());
-        // Verify that we can produce a valid reference (which are required to
-        // always be well-aligned).
-        assert_eq!(allocation.as_ptr() as usize % std::mem::align_of::<T>(), 0);
-
-        TypedBlob {
-            allocation,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T> AsRef<[T]> for TypedBlob<[T]> {
-    /// Creates a typed reference to the underlying data structure backed by the
-    /// source bytes.
-    ///
-    /// # Panics
-    /// This function panicks if the allocation does not fit exactly a certain
-    /// count of `T`-sized values.
-    fn as_ref(&self) -> &[T] {
-        // SAFETY: The only way to create this struct with *unsized* `T` is via
-        // `TypedBlob::from_box_unsized`, where:
-        // 1. the caller has to prove that the data is of correct format,
-        // 2. we check that the resulting reference will be well-aligned.
-
-        // Ensure that allocation can hold exactly N elements of type T - we
-        // disallow any trailing bytes outside of the resulting `[T]` slice.
-        assert_eq!(self.allocation.len() % std::mem::size_of::<T>(), 0);
-
-        unsafe {
-            std::slice::from_raw_parts(
-                self.allocation.as_ptr() as *const T,
-                // Account for possibly fewer slice elements, e.g. [u16] will
-                // have 2 times fewer elements than [u8] for the same bytes.
-                self.allocation.len() * std::mem::size_of::<u8>() / std::mem::size_of::<T>(),
-            )
-        }
-    }
-}
-
-#[allow(dead_code)]
-impl<T: ?Sized> TypedBlob<T> {
-    /// Converts an opaque blob of bytes into a typed blob asserting that the
-    /// raw bytes correspond in shape to value of type `T`.
-    ///
-    /// **NOTE: Only slices are supported at the moment.** To uphold safety
-    /// invariants, this type can only be safely dereferenced for slice types,
-    /// as long as the allocation size matches the slice layout.
-    ///
-    /// # Panics
-    /// This function panicks if the backing pointee alignment is not compatible
-    /// with that of `&T`.
-    ///
-    /// # Safety
-    /// The caller has to guarantee that the type of is of correct layout.
-    /// For slices (`[T]`), the memory allocation should contain *exactly* given
-    /// N elements of type T.
-    pub unsafe fn from_box_unsized(allocation: Box<[u8]>) -> Self {
-        // Verify that we can produce a valid reference (which are required to
-        // always be well-aligned).
-        assert_eq!(allocation.as_ptr() as usize % std::mem::align_of::<&T>(), 0);
-
-        TypedBlob {
-            allocation,
-            marker: PhantomData,
-        }
-    }
-}
-
 /// Helper struct that contains the data either inline or in a heap allocation.
 /// Allows to skip allocation for sufficiently small data or when the size is
 /// static.
 pub enum MaybeUnsized<T> {
     Inline(T),
-    Unsized(TypedBlob<T>),
+    Unsized(Box<T>),
 }
 
 impl<T: Copy> MaybeUnsized<T> {
@@ -367,200 +236,5 @@ impl<T> AsRef<T> for MaybeUnsized<T> {
             Self::Inline(value) => &value,
             Self::Unsized(blob) => &blob,
         }
-    }
-}
-
-pub trait AsBytes {
-    fn as_bytes(&self) -> &[u8];
-}
-
-impl<T: ?Sized> AsBytes for TypedBlob<T> {
-    fn as_bytes(&self) -> &[u8] {
-        self.as_bytes()
-    }
-}
-
-/// Defines a trait for accessing dynamic fields (byte slices) for structs that
-/// have a header of a known size which also defines the rest of the struct
-/// layout.
-/// Assumes a contiguous byte buffer.
-#[macro_export]
-macro_rules! dyn_struct {
-    (
-        struct $struct_ident: ident,
-        $(#[$outer:meta])*
-        trait $ident: ident {
-            $header: ty,
-            $(
-                $(#[$meta:meta])*
-                $field: ident [$($len: tt)*],
-            )*
-        }
-    ) => {
-        $(#[$outer])*
-        pub trait $ident: $crate::helpers::AsBytes + AsRef<$header> {
-            dyn_struct! { ;
-                $(
-                    $(#[$meta])*
-                    $field [$($len)*],
-                )*
-            }
-        }
-
-        #[repr(transparent)]
-        pub struct $struct_ident($header);
-        impl AsRef<$header> for $struct_ident {
-            fn as_ref(&self) -> &$header {
-                &self.0
-            }
-        }
-
-        impl $ident for TypedBlob<$struct_ident> {}
-    };
-    // Expand fields. Recursively expand each field, pushing the processed field
-    //  identifier to a queue which is later used to calculate field offset for
-    // subsequent fields
-    (
-        $($prev: ident,)* ;
-        $(#[$curr_meta:meta])*
-        $curr: ident [$($curr_len: tt)*],
-        $(
-            $(#[$field_meta:meta])*
-            $field: ident [$($field_len: tt)*],
-        )*
-    ) => {
-        $(#[$curr_meta])*
-        #[inline(always)]
-        fn $curr(&self) -> &[u8] {
-            let this = self.as_ref();
-
-            let offset = std::mem::size_of_val(this)
-                $(+ self.$prev().len())*;
-
-            let size: usize = dyn_struct! { this, $($curr_len)* };
-
-            &self.as_bytes()[offset..offset + size]
-        }
-        // Once expanded, push the processed ident and recursively expand other
-        // fields
-        dyn_struct! { $($prev,)* $curr, ;
-            $(
-                $(#[$field_meta])*
-                $field [$($field_len)*],
-            )*
-        }
-    };
-
-    ($($prev: ident,)* ; ) => {};
-    // Accept either header member values or arbitrary expressions (e.g. numeric
-    // constants)
-    ($this: expr, $ident: ident) => { $this.$ident as usize };
-    ($this: expr, $expr: expr) => { $expr };
-
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn typed_blob() {
-        #[repr(C)]
-        #[derive(Debug)]
-        struct Inner {
-            first: u16,
-            second: u32,
-        }
-
-        let bytes = vec![0x1, 0x1, 0xFF, 0xFF, 0x2, 0x2, 0x2, 0x2, 0xDE, 0xDE].into_boxed_slice();
-        let typed = unsafe { TypedBlob::<Inner>::from_box(bytes.clone()) };
-        assert_eq!(typed.first, 0x0101);
-        assert_eq!(typed.second, 0x02020202);
-        let typed = unsafe { TypedBlob::<[u8; 10]>::from_box(bytes.clone()) };
-        assert_eq!(&*typed, bytes.as_ref());
-
-        let typed = unsafe { TypedBlob::<[u8]>::from_box_unsized(bytes.clone()) };
-        assert_eq!(typed.as_ref(), bytes.as_ref());
-        let typed = unsafe { TypedBlob::<[u16]>::from_box_unsized(bytes.clone()) };
-        assert_eq!(typed.as_ref(), &[0x0101, 0xFFFF, 0x0202, 0x0202, 0xDEDE]);
-
-        assert!(std::panic::catch_unwind(|| {
-            // Allocation is too small
-            unsafe { TypedBlob::<[[u8; 1000]; 1]>::from_box(bytes.clone()) }
-        })
-        .is_err());
-    }
-
-    #[test]
-    fn dyn_struct() {
-        #[repr(C)]
-        #[derive(Debug, PartialEq)]
-        pub struct MyHeader {
-            count: u8,
-            some: u16,
-            another: u8,
-        }; // 6 bytes
-        #[derive(Debug)]
-        #[repr(C)]
-        struct MyDynStruct([u8; 12]);
-        dyn_struct! {
-            struct MyDynStructBlob,
-            trait MyDynStructView {
-                MyHeader,
-                field1[count],
-                field2[4],
-            }
-        };
-        impl AsRef<MyHeader> for MyDynStruct {
-            fn as_ref(&self) -> &MyHeader {
-                let storage = &self.0[..std::mem::size_of::<MyHeader>()];
-                unsafe { &*storage.as_ptr().cast() }
-            }
-        }
-        impl AsBytes for MyDynStruct {
-            fn as_bytes(&self) -> &[u8] {
-                &self.0
-            }
-        }
-        impl MyDynStructView for MyDynStruct {}
-
-        let dyn_struct = MyDynStruct([
-            0x2,  // MyHeader.count
-            0xDE, // MyHeader.some (padding)
-            0xFF, 0xFF, // MyHeader.some
-            0x03, // MyHeader.another
-            0xDE, // alignment for total header size to be a multiple of largest member alignemnt (some)
-            0xDD, 0xDD, // field1[count]
-            0xA, 0xB, 0xC, 0xD, // field2[3]
-        ]);
-        eprintln!("{}", std::mem::size_of::<MyHeader>());
-        assert_eq!(
-            dyn_struct.as_ref(),
-            &MyHeader {
-                count: 0x02,
-                some: 0xFFFF,
-                another: 0x03
-            }
-        );
-        assert_eq!(dyn_struct.field1(), &[0xDD, 0xDD]);
-        assert_eq!(dyn_struct.field2(), &[0xA, 0xB, 0xC, 0xD]);
-
-        let blob = unsafe { TypedBlob::<MyHeader>::from_box(Box::new(dyn_struct.0)) };
-        impl MyDynStructView for TypedBlob<MyHeader> {}
-        impl AsRef<MyHeader> for MyHeader {
-            fn as_ref(&self) -> &MyHeader {
-                self
-            }
-        }
-        assert_eq!(
-            blob.as_ref(),
-            &MyHeader {
-                count: 0x02,
-                some: 0xFFFF,
-                another: 0x03
-            }
-        );
-        assert_eq!(blob.field1(), &[0xDD, 0xDD]);
-        assert_eq!(blob.field2(), &[0xA, 0xB, 0xC, 0xD]);
     }
 }

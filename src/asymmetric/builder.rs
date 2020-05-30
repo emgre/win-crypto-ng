@@ -1,6 +1,7 @@
 //! Type-safe builders to generate various asymmetric keys.
 
-use crate::helpers::{Handle, TypedBlob, WindowsString};
+use crate::helpers::{DynStruct, Handle, WindowsString};
+use crate::key::ErasedKeyBlob;
 use crate::key::{BlobType, KeyHandle};
 use crate::{Error, Result};
 use std::marker::PhantomData;
@@ -214,7 +215,7 @@ impl BuilderParams for BuilderOptions {
         let (property, blob) = match self {
             BuilderOptions::Dsa(params) => (BCRYPT_DSA_PARAMETERS, params.to_blob(key_bits)),
             BuilderOptions::Dh(params) => {
-                (BCRYPT_DH_PARAMETERS, params.to_blob(key_bits).into_inner())
+                (BCRYPT_DH_PARAMETERS, params.to_blob(key_bits).into_bytes())
             }
         };
 
@@ -227,7 +228,7 @@ impl BuilderParams for DhParams {
         set_property(
             handle,
             BCRYPT_DH_PARAMETERS,
-            self.to_blob(key_bits).as_bytes(),
+            self.to_blob(key_bits).as_ref().as_bytes(),
         )
     }
 }
@@ -299,8 +300,8 @@ pub struct DsaParamsV1 {
 impl DsaParams {
     fn to_blob(&self, key_bits: u32) -> Box<[u8]> {
         match self {
-            DsaParams::V1(params) => params.to_blob(key_bits).into_inner(),
-            DsaParams::V2(params) => params.to_blob(key_bits).into_inner(),
+            DsaParams::V1(params) => params.to_blob(key_bits).into_bytes(),
+            DsaParams::V2(params) => params.to_blob(key_bits).into_bytes(),
         }
     }
 }
@@ -331,75 +332,71 @@ pub struct DsaParamsV2 {
 }
 
 impl DsaParamsV1 {
-    fn to_blob(&self, key_bits: u32) -> TypedBlob<DsaParameter> {
+    fn to_blob(&self, key_bits: u32) -> Box<DynStruct<DsaParameter>> {
         let key_bytes = key_bits as usize / 8;
         let header_len = std::mem::size_of::<BCRYPT_DSA_PARAMETER_HEADER>();
         let length = header_len + key_bytes + key_bytes;
-        let header = BCRYPT_DSA_PARAMETER_HEADER {
-            cbKeyLength: key_bytes as u32,
-            Count: self.count.to_be_bytes(),
-            cbLength: length as u32,
-            Seed: self.seed,
-            q: self.q,
-            dwMagic: BCRYPT_DSA_PARAMETERS_MAGIC,
-        };
-        let mut boxed = vec![0u8; length as usize].into_boxed_slice();
-        let header =
-            unsafe { std::slice::from_raw_parts(&header as *const _ as *const u8, header_len) };
-        &mut boxed[..header_len].copy_from_slice(header);
-        &mut boxed[header_len..header_len + key_bytes].copy_from_slice(&*self.prime);
-        &mut boxed[header_len + key_bytes..].copy_from_slice(&*self.generator);
 
-        unsafe { TypedBlob::from_box(boxed) }
+        DynStruct::<DsaParameter>::clone_from_parts(
+            &BCRYPT_DSA_PARAMETER_HEADER {
+                cbLength: length as u32,
+                dwMagic: BCRYPT_DSA_PARAMETERS_MAGIC,
+                cbKeyLength: key_bytes as u32,
+                Count: self.count.to_be_bytes(),
+                Seed: self.seed,
+                q: self.q,
+            },
+            &DsaParameterViewTail {
+                generator: &self.generator,
+                prime: &self.prime,
+            },
+        )
     }
 }
 
 impl DsaParamsV2 {
-    fn to_blob(&self, key_bits: u32) -> TypedBlob<DsaParameterV2> {
+    fn to_blob(&self, key_bits: u32) -> Box<DynStruct<DsaParameterV2>> {
         let key_bytes = key_bits as usize / 8;
         let header_len = std::mem::size_of::<BCRYPT_DSA_PARAMETER_HEADER_V2>();
         let length = header_len + key_bytes + key_bytes;
-        let header = BCRYPT_DSA_PARAMETER_HEADER_V2 {
-            cbKeyLength: key_bytes as u32,
-            Count: self.count.to_be_bytes(),
-            cbLength: length as u32,
-            cbSeedLength: self.seed_len,
-            hashAlgorithm: self.hash as u32,
-            standardVersion: self.standard as u32,
-            cbGroupSize: self.group_size,
-            dwMagic: BCRYPT_DSA_PARAMETERS_MAGIC_V2,
-        };
-        let mut boxed = vec![0u8; length as usize].into_boxed_slice();
-        let header =
-            unsafe { std::slice::from_raw_parts(&header as *const _ as *const u8, header_len) };
-        &mut boxed[..header_len].copy_from_slice(header);
-        // TODO: Verify that prime and generator are last (docs are empty on layout...)
-        &mut boxed[header_len..header_len + key_bytes].copy_from_slice(&*self.prime);
-        &mut boxed[header_len + key_bytes..].copy_from_slice(&*self.generator);
 
-        unsafe { TypedBlob::from_box(boxed) }
+        DynStruct::<DsaParameterV2>::clone_from_parts(
+            &BCRYPT_DSA_PARAMETER_HEADER_V2 {
+                cbLength: length as u32,
+                dwMagic: BCRYPT_DSA_PARAMETERS_MAGIC_V2,
+                cbKeyLength: key_bytes as u32,
+                Count: self.count.to_be_bytes(),
+                cbSeedLength: self.seed_len,
+                hashAlgorithm: self.hash as u32,
+                standardVersion: self.standard as u32,
+                cbGroupSize: self.group_size,
+            },
+            // TODO: Verify that prime and generator are last (docs are empty on layout...)
+            &DsaParameterV2ViewTail {
+                generator: &self.generator,
+                prime: &self.prime,
+            },
+        )
     }
 }
 
 impl DhParams {
-    fn to_blob(&self, key_bits: u32) -> TypedBlob<DhParameter> {
+    fn to_blob(&self, key_bits: u32) -> Box<DynStruct<DhParameter>> {
         let key_bytes = key_bits as usize / 8;
         let header_len = std::mem::size_of::<BCRYPT_DH_PARAMETER_HEADER>();
         let length = header_len + key_bytes + key_bytes;
-        let header = BCRYPT_DH_PARAMETER_HEADER {
-            cbLength: length as u32,
-            dwMagic: BCRYPT_DH_PARAMETERS_MAGIC,
-            cbKeyLength: key_bytes as u32,
-        };
 
-        let mut boxed = vec![0u8; length as usize].into_boxed_slice();
-        let header =
-            unsafe { std::slice::from_raw_parts(&header as *const _ as *const u8, header_len) };
-        &mut boxed[..header_len].copy_from_slice(header);
-        &mut boxed[header_len..header_len + key_bytes].copy_from_slice(&*self.modulus);
-        &mut boxed[header_len + key_bytes..].copy_from_slice(&*self.generator);
-
-        unsafe { TypedBlob::from_box(boxed) }
+        DynStruct::<DhParameter>::clone_from_parts(
+            &BCRYPT_DH_PARAMETER_HEADER {
+                cbLength: length as u32,
+                dwMagic: BCRYPT_DH_PARAMETERS_MAGIC,
+                cbKeyLength: key_bytes as u32,
+            },
+            &DhParameterViewTail {
+                generator: &self.generator,
+                modulus: &self.modulus,
+            },
+        )
     }
 }
 
@@ -460,10 +457,10 @@ impl KeyPair {
 
     pub fn import(
         provider: &AsymmetricAlgorithm,
-        blob: TypedBlob<BCRYPT_KEY_BLOB>,
+        key_data: &DynStruct<ErasedKeyBlob>,
         no_validate_public: bool,
     ) -> Result<Self> {
-        let blob_type = blob.to_type().ok_or(Error::InvalidParameter)?;
+        let blob_type = key_data.blob_type().ok_or(Error::InvalidParameter)?;
         let property = WindowsString::from_str(blob_type.as_value());
 
         let mut handle = KeyHandle::default();
@@ -473,8 +470,8 @@ impl KeyPair {
                 null_mut(),
                 property.as_ptr(),
                 handle.as_mut_ptr(),
-                blob.as_bytes().as_ptr() as *mut _,
-                blob.as_bytes().len() as u32,
+                key_data.as_bytes().as_ptr() as *mut _,
+                key_data.as_bytes().len() as u32,
                 if no_validate_public {
                     BCRYPT_NO_KEY_VALIDATION
                 } else {
@@ -485,7 +482,10 @@ impl KeyPair {
         .map(|_| KeyPair(handle))
     }
 
-    pub fn export(handle: BCRYPT_KEY_HANDLE, kind: BlobType) -> Result<TypedBlob<BCRYPT_KEY_BLOB>> {
+    pub fn export(
+        handle: BCRYPT_KEY_HANDLE,
+        kind: BlobType,
+    ) -> Result<Box<DynStruct<ErasedKeyBlob>>> {
         let property = WindowsString::from_str(kind.as_value());
 
         let mut bytes: ULONG = 0;
@@ -501,6 +501,7 @@ impl KeyPair {
             ))?;
         }
         let mut blob = vec![0u8; bytes as usize].into_boxed_slice();
+        eprintln!("Asked to allocate {} bytes", bytes);
 
         unsafe {
             Error::check(BCryptExportKey(
@@ -514,7 +515,7 @@ impl KeyPair {
             ))?;
         }
 
-        Ok(unsafe { TypedBlob::from_box(blob) })
+        Ok(DynStruct::<ErasedKeyBlob>::from_boxed(blob))
     }
 }
 
@@ -531,33 +532,33 @@ impl KeyPairBuilder<'_> {
 use crate::dyn_struct;
 
 dyn_struct! {
-    struct DsaParameter,
+    enum DsaParameter {},
+    header: BCRYPT_DSA_PARAMETER_HEADER,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_parameter_header
-    trait DsaParameterView {
-        BCRYPT_DSA_PARAMETER_HEADER,
+    view: struct ref DsaParameterViewTail {
         prime[cbKeyLength],
         generator[cbKeyLength],
     }
 }
 
 dyn_struct! {
-    struct DsaParameterV2,
+    enum DsaParameterV2 {},
+    header: BCRYPT_DSA_PARAMETER_HEADER_V2,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_parameter_header
-    trait DsaParameterV2View {
-        BCRYPT_DSA_PARAMETER_HEADER_V2,
+    view: struct ref DsaParameterV2ViewTail {
         prime[cbKeyLength],
         generator[cbKeyLength],
     }
 }
 
 dyn_struct! {
-    struct DhParameter,
+    enum DhParameter {},
+    header: BCRYPT_DH_PARAMETER_HEADER,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_parameter_header
-    trait DhParameterView {
-        BCRYPT_DH_PARAMETER_HEADER,
+    view: struct ref DhParameterViewTail {
         modulus[cbKeyLength],
         generator[cbKeyLength],
     }

@@ -1,7 +1,8 @@
 //! Cryptographic key handle
 
 use crate::dyn_struct;
-use crate::helpers::{Handle, TypedBlob};
+use crate::helpers::dyn_struct::{DynStruct, DynStructParts};
+use crate::helpers::Handle;
 use std::convert::TryFrom;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
@@ -129,201 +130,150 @@ impl<'a> TryFrom<&'a str> for BlobType {
 }
 
 /// Marker trait for values containing CNG key blob types.
-pub trait KeyBlob {
-    const MAGIC: ULONG;
-    const TYPE: &'static str;
-    type Value;
+pub trait KeyBlob: Sized {
+    const VALID_MAGIC: &'static [ULONG];
+
+    fn is_magic_valid(magic: ULONG) -> bool {
+        let accepts_all = Self::VALID_MAGIC == &[];
+        accepts_all || Self::VALID_MAGIC.iter().any(|&x| x == magic)
+    }
 }
 
-macro_rules! newtype_key_blob {
-    ($($name: ident, $type: expr, $magic: tt, $value: ty),*) => {
+impl<T> AsRef<DynStruct<ErasedKeyBlob>> for DynStruct<T>
+where
+    T: DynStructParts + KeyBlob,
+{
+    fn as_ref(&self) -> &DynStruct<ErasedKeyBlob> {
+        self.as_erased()
+    }
+}
+
+impl<T> DynStruct<T>
+where
+    T: DynStructParts + KeyBlob,
+{
+    pub fn magic(&self) -> ULONG {
+        self.as_erased().header().Magic
+    }
+
+    pub fn blob_type(&self) -> Option<BlobType> {
+        magic_to_blob_type(self.magic())
+    }
+
+    pub fn as_erased(&self) -> &DynStruct<ErasedKeyBlob> {
+        let header_len = std::mem::size_of::<<ErasedKeyBlob as DynStructParts>::Header>();
+        let tail_len = std::mem::size_of_val(self) - header_len;
+
+        let slice = unsafe { std::slice::from_raw_parts(self as *const _ as *const (), tail_len) };
+        // Construct a custom slice-based DST
+        // SAFETY:
+        // 1. Compiler enforces compatibility of DST pointer metadata
+        //    (so our DST wide pointer has the same layout as slice pointer)
+        // 2. The lifetime of both references is the same
+        unsafe { &*(slice as *const [()] as *const DynStruct<ErasedKeyBlob>) }
+    }
+
+    // NOTE: TryInto can't be implemented due to blanket generic TryFrom impl,
+    // i.e. U = T provides a blanket Into<T> for T impl.
+    pub fn try_into<U>(self: Box<Self>) -> Result<Box<DynStruct<U>>, Box<Self>>
+    where
+        U: DynStructParts + KeyBlob,
+    {
+        if !U::is_magic_valid(self.magic()) {
+            return Err(self);
+        }
+
+        // Adjust the length component
+        let header_len = std::mem::size_of::<U::Header>();
+        let tail_len = std::mem::size_of_val(self.as_ref()) - header_len;
+
+        // Construct a custom slice-based DST
+        let ptr = Box::into_raw(self);
+        // SAFETY:
+        // 1. Compiler enforces compatibility of DST pointer metadata
+        //    (so our DST wide pointer has the same layout as slice pointer)
+        // 2. The lifetime of both references is the same
+        unsafe {
+            let slice = std::slice::from_raw_parts_mut(ptr as *mut (), tail_len);
+            Ok(Box::from_raw(slice as *mut [()] as *mut DynStruct<U>))
+        }
+    }
+}
+
+macro_rules! key_blobs {
+    ($($name: ident, $blob: expr, magic: $([$($val: ident),*])?),*) => {
+        fn magic_to_blob_type(magic: ULONG) -> Option<BlobType> {
+            match magic {
+                $(
+                    $($(| $val)* => Some($blob),)?
+                )*
+                _ => None
+            }
+        }
+
         $(
-            #[repr(transparent)]
-            pub struct $name($value);
-            impl AsRef<$value> for $name {
-                fn as_ref(&self) -> &$value {
-                    &self.0
-                }
-            }
             impl KeyBlob for $name {
-                const MAGIC: ULONG = $magic;
-                const TYPE: &'static str = $type;
-                type Value = $value;
+                const VALID_MAGIC: &'static [ULONG] = &[$($($val),*)?];
             }
 
-            impl TryFrom<TypedBlob<BCRYPT_KEY_BLOB>> for TypedBlob<$name> {
-                type Error = TypedBlob<BCRYPT_KEY_BLOB>;
-                fn try_from(value: TypedBlob<BCRYPT_KEY_BLOB>) -> Result<Self, Self::Error> {
-                    if value.Magic == <$name as KeyBlob>::MAGIC {
-                        // SAFETY: Every specialized key blob struct extends the
-                        // basic "type-erased" BCRYPT_KEY_BLOB - the magic value
-                        // is a discriminant. We trust the documentation on how
-                        // can we reinterpret the blob layout according to its
-                        // magic.
-                        Ok(unsafe { TypedBlob::from_box(value.into_inner()) })
-                    } else {
-                        Err(value)
-                    }
-                }
-            }
         )*
-
-        impl TypedBlob<BCRYPT_KEY_BLOB> {
-            pub fn to_type(&self) -> Option<BlobType> {
-                match self.Magic {
-                    $($magic => {TryFrom::try_from($type).ok()})*
-                    _ => None,
-                }
-            }
-        }
-
-        impl<T: KeyBlob> From<TypedBlob<T>> for TypedBlob<BCRYPT_KEY_BLOB> {
-            fn from(typed: TypedBlob<T>) -> Self {
-                // SAFETY: Every specialized key blob struct extends the
-                // basic "type-erased" BCRYPT_KEY_BLOB, so it's safe to
-                // just discard the concrete type
-                unsafe { TypedBlob::from_box(typed.into_inner()) }
-            }
-        }
     };
 }
 
-newtype_key_blob!(
-    DhPrivate,
-    BCRYPT_DH_PRIVATE_BLOB,
-    BCRYPT_DH_PRIVATE_MAGIC,
-    BCRYPT_DH_KEY_BLOB,
-    DhPublic,
-    BCRYPT_DH_PUBLIC_BLOB,
-    BCRYPT_DH_PUBLIC_MAGIC,
-    BCRYPT_DH_KEY_BLOB,
-    DsaPublic,
-    BCRYPT_DSA_PUBLIC_BLOB,
-    BCRYPT_DSA_PUBLIC_MAGIC,
-    BCRYPT_DSA_KEY_BLOB,
-    DsaPrivate,
-    BCRYPT_DSA_PRIVATE_BLOB,
-    BCRYPT_DSA_PRIVATE_MAGIC,
-    BCRYPT_DSA_KEY_BLOB,
-    DsaPublicV2,
-    BCRYPT_DSA_PUBLIC_BLOB,
-    BCRYPT_DSA_PUBLIC_MAGIC_V2,
-    BCRYPT_DSA_KEY_BLOB_V2,
-    DsaPrivateV2,
-    BCRYPT_DSA_PRIVATE_BLOB,
-    BCRYPT_DSA_PRIVATE_MAGIC_V2,
-    BCRYPT_DSA_KEY_BLOB_V2,
-    RsaFullPrivate,
-    BCRYPT_RSAFULLPRIVATE_BLOB,
-    BCRYPT_RSAFULLPRIVATE_MAGIC,
-    BCRYPT_RSAKEY_BLOB,
-    RsaPrivate,
-    BCRYPT_RSAPRIVATE_BLOB,
-    BCRYPT_RSAPRIVATE_MAGIC,
-    BCRYPT_RSAKEY_BLOB,
-    RsaPublic,
-    BCRYPT_RSAPUBLIC_BLOB,
-    BCRYPT_RSAPUBLIC_MAGIC,
-    BCRYPT_RSAKEY_BLOB,
-    EcdhPublic,
-    BCRYPT_ECCPUBLIC_BLOB,
-    BCRYPT_ECDH_PUBLIC_GENERIC_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdhPrivate,
-    BCRYPT_ECCPRIVATE_BLOB,
-    BCRYPT_ECDH_PRIVATE_GENERIC_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdhP256Public,
-    BCRYPT_ECCPUBLIC_BLOB,
-    BCRYPT_ECDH_PUBLIC_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdhP256Private,
-    BCRYPT_ECCPRIVATE_BLOB,
-    BCRYPT_ECDH_PRIVATE_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdhP384Public,
-    BCRYPT_ECCPUBLIC_BLOB,
-    BCRYPT_ECDH_PUBLIC_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdhP384Private,
-    BCRYPT_ECCPRIVATE_BLOB,
-    BCRYPT_ECDH_PRIVATE_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdhP521Public,
-    BCRYPT_ECCPUBLIC_BLOB,
-    BCRYPT_ECDH_PUBLIC_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdhP521Private,
-    BCRYPT_ECCPRIVATE_BLOB,
-    BCRYPT_ECDH_PRIVATE_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdsaP256Public,
-    BCRYPT_ECCPUBLIC_BLOB,
-    BCRYPT_ECDSA_PUBLIC_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdsaP256Private,
-    BCRYPT_ECCPRIVATE_BLOB,
-    BCRYPT_ECDSA_PRIVATE_P256_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdsaP384Public,
-    BCRYPT_ECCPUBLIC_BLOB,
-    BCRYPT_ECDSA_PUBLIC_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdsaP384Private,
-    BCRYPT_ECCPRIVATE_BLOB,
-    BCRYPT_ECDSA_PRIVATE_P384_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdsaP521Public,
-    BCRYPT_ECCPUBLIC_BLOB,
-    BCRYPT_ECDSA_PUBLIC_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB,
-    EcdsaP521Private,
-    BCRYPT_ECCPRIVATE_BLOB,
-    BCRYPT_ECDSA_PRIVATE_P521_MAGIC,
-    BCRYPT_ECCKEY_BLOB
-);
-
-impl RsaKeyPublicView for TypedBlob<RsaPublic> {}
-impl RsaKeyBlobPrivate for TypedBlob<RsaPrivate> {}
-impl RsaKeyBlobFullPrivate for TypedBlob<RsaFullPrivate> {}
-impl DsaKeyBlobPublic for TypedBlob<DsaPublic> {}
-impl DsaKeyBlobPrivate for TypedBlob<DsaPrivate> {}
-impl DsaKeyBlobPublicV2 for TypedBlob<DsaPublicV2> {}
-impl DsaKeyBlobPrivateV2 for TypedBlob<DsaPrivateV2> {}
-impl DhKeyBlobPublic for TypedBlob<DhPublic> {}
-impl DhKeyBlobPrivate for TypedBlob<DhPrivate> {}
-impl EccKeyBlobPublic for TypedBlob<EcdhPublic> {}
-impl EccKeyBlobPrivate for TypedBlob<EcdhPrivate> {}
-impl EccKeyBlobPublic for TypedBlob<EcdhP256Public> {}
-impl EccKeyBlobPrivate for TypedBlob<EcdhP256Private> {}
-impl EccKeyBlobPublic for TypedBlob<EcdhP384Public> {}
-impl EccKeyBlobPrivate for TypedBlob<EcdhP384Private> {}
-impl EccKeyBlobPublic for TypedBlob<EcdhP521Public> {}
-impl EccKeyBlobPrivate for TypedBlob<EcdhP521Private> {}
-impl EccKeyBlobPublic for TypedBlob<EcdsaP256Public> {}
-impl EccKeyBlobPrivate for TypedBlob<EcdsaP256Private> {}
-impl EccKeyBlobPublic for TypedBlob<EcdsaP384Public> {}
-impl EccKeyBlobPrivate for TypedBlob<EcdsaP384Private> {}
-impl EccKeyBlobPublic for TypedBlob<EcdsaP521Public> {}
-impl EccKeyBlobPrivate for TypedBlob<EcdsaP521Private> {}
+key_blobs! {
+    ErasedKeyBlob, BlobType::PublicKey, magic:,
+    DhKeyPublicBlob, BlobType::DhPublic, magic: [BCRYPT_DH_PUBLIC_MAGIC],
+    DhKeyPrivateBlob, BlobType::DhPrivate, magic: [BCRYPT_DH_PRIVATE_MAGIC],
+    DsaKeyPublicBlob, BlobType::DsaPublic, magic: [BCRYPT_DSA_PUBLIC_MAGIC],
+    DsaKeyPrivateBlob, BlobType::DsaPrivate, magic: [BCRYPT_DSA_PRIVATE_MAGIC],
+    DsaKeyPublicV2Blob, BlobType::DsaPublic, magic: [BCRYPT_DSA_PUBLIC_MAGIC_V2],
+    DsaKeyPrivateV2Blob, BlobType::DsaPrivate, magic: [BCRYPT_DSA_PRIVATE_MAGIC_V2],
+    EccKeyPublicBlob, BlobType::EccPublic, magic: [
+        BCRYPT_ECDH_PUBLIC_GENERIC_MAGIC, BCRYPT_ECDH_PUBLIC_P256_MAGIC,
+        BCRYPT_ECDH_PUBLIC_P384_MAGIC, BCRYPT_ECDH_PUBLIC_P521_MAGIC,
+        BCRYPT_ECDSA_PUBLIC_GENERIC_MAGIC, BCRYPT_ECDSA_PUBLIC_P256_MAGIC,
+        BCRYPT_ECDSA_PUBLIC_P384_MAGIC, BCRYPT_ECDSA_PUBLIC_P521_MAGIC
+    ],
+    EccKeyPrivateBlob, BlobType::EccPrivate, magic: [
+        BCRYPT_ECDH_PRIVATE_GENERIC_MAGIC, BCRYPT_ECDH_PRIVATE_P256_MAGIC,
+        BCRYPT_ECDH_PRIVATE_P384_MAGIC, BCRYPT_ECDH_PRIVATE_P521_MAGIC,
+        BCRYPT_ECDSA_PRIVATE_GENERIC_MAGIC, BCRYPT_ECDSA_PRIVATE_P256_MAGIC,
+        BCRYPT_ECDSA_PRIVATE_P384_MAGIC, BCRYPT_ECDSA_PRIVATE_P521_MAGIC
+    ],
+    RsaKeyPublicBlob, BlobType::RsaPublic, magic: [BCRYPT_RSAPUBLIC_MAGIC],
+    RsaKeyPrivateBlob, BlobType::RsaPrivate, magic: [BCRYPT_RSAPRIVATE_MAGIC],
+    RsaKeyFullPrivateBlob, BlobType::RsaFullPrivate, magic: [BCRYPT_RSAFULLPRIVATE_MAGIC]
+}
 
 dyn_struct! {
-    struct RsaKeyPublicBlob,
+    enum ErasedKeyBlob {},
+    header: BCRYPT_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    trait RsaKeyPublicView {
-        BCRYPT_RSAKEY_BLOB,
+    view: struct ref ErasedKeyBlobView {
+        phantom[0],
+    }
+}
+
+dyn_struct! {
+    enum RsaKeyPublicBlob {},
+    header: BCRYPT_RSAKEY_BLOB,
+    /// All the fields are stored as a big-endian multiprecision integer.
+    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
+    view: struct ref RsaKeyPublicViewTail {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
     }
 }
 
 dyn_struct! {
-    struct RsaKeyPrivateBlob,
+    #[derive(Debug)]
+    enum RsaKeyPrivateBlob {},
+    header: BCRYPT_RSAKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    trait RsaKeyBlobPrivate {
-        BCRYPT_RSAKEY_BLOB,
+    #[derive(Debug)]
+    view: struct ref RsaKeyBlobPrivateTail {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
         prime1[cbPrime1],
@@ -332,11 +282,11 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct RsaKeyFullPrivateBlob,
+    enum RsaKeyFullPrivateBlob {},
+    header: BCRYPT_RSAKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    trait RsaKeyBlobFullPrivate {
-        BCRYPT_RSAKEY_BLOB,
+    view: struct ref RsaKeyBlobFullPrivateTail {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
         prime1[cbPrime1],
@@ -349,12 +299,11 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct DhKeyPublicBlob,
+    enum DhKeyPublicBlob {},
+    header: BCRYPT_DH_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
-    #[allow(non_snake_case)]
-    trait DhKeyBlobPublic {
-        BCRYPT_DH_KEY_BLOB,
+    view: struct ref DhKeyBlobPublicTail {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -362,12 +311,11 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct DhKeyPrivateBlob,
+    enum DhKeyPrivateBlob {},
+    header: BCRYPT_DH_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
-    #[allow(non_snake_case)]
-    trait DhKeyBlobPrivate {
-        BCRYPT_DH_KEY_BLOB,
+    view: struct ref DhKeyBlobPrivateTail {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -376,11 +324,11 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct DsaKeyPublicBlob,
+    enum DsaKeyPublicBlob {},
+    header: BCRYPT_DSA_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
-    trait DsaKeyBlobPublic {
-        BCRYPT_DSA_KEY_BLOB,
+    view: struct ref DsaKeyBlobPublicTail {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -388,11 +336,11 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct DsaKeyPrivateBlob,
+    enum DsaKeyPrivateBlob {},
+    header: BCRYPT_DSA_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
-    trait DsaKeyBlobPrivate {
-        BCRYPT_DSA_KEY_BLOB,
+    view: struct ref DsaKeyBlobPrivateTail {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -401,11 +349,11 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct DsaKeyPublicV2Blob,
+    enum DsaKeyPublicV2Blob {},
+    header: BCRYPT_DSA_KEY_BLOB_V2,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
-    trait DsaKeyBlobPublicV2 {
-        BCRYPT_DSA_KEY_BLOB_V2,
+    view: struct ref DsaKeyBlobPublicV2Tail {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -413,11 +361,11 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct DsaKeyPrivateV2Blob,
+    enum DsaKeyPrivateV2Blob {},
+    header: BCRYPT_DSA_KEY_BLOB_V2,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
-    trait DsaKeyBlobPrivateV2 {
-        BCRYPT_DSA_KEY_BLOB_V2,
+    view: struct ref DsaKeyBlobPrivateV2Tail {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -426,22 +374,22 @@ dyn_struct! {
 }
 
 dyn_struct! {
-    struct EccKeyPublicBlob,
+    enum EccKeyPublicBlob {},
+    header: BCRYPT_ECCKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
-    trait EccKeyBlobPublic {
-        BCRYPT_ECCKEY_BLOB,
+    view: struct ref EccKeyBlobPublicTail {
         x[cbKey],
         y[cbKey],
     }
 }
 
 dyn_struct! {
-    struct EccKeyPrivateBlob,
+    enum EccKeyPrivateBlob {},
+    header: BCRYPT_ECCKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
-    trait EccKeyBlobPrivate {
-        BCRYPT_ECCKEY_BLOB,
+    view: struct ref EccKeyBlobPrivateTail {
         x[cbKey],
         y[cbKey],
         d[cbKey],
