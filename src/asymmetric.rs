@@ -7,12 +7,15 @@
 //!
 //! > **NOTE**: This is currently a stub and should be expanded.
 
-use crate::helpers::{AlgoHandle, Handle, TypedBlob, WindowsString};
+use crate::helpers::dyn_struct::DynStruct;
+use crate::helpers::dyn_struct::DynStructParts;
+use crate::helpers::{AlgoHandle, Handle, WindowsString};
+use crate::key::ErasedKeyBlob;
 use crate::key::{BlobType, KeyHandle};
 use crate::property::{AlgorithmName, EccCurveName};
 use crate::Result;
 use std::borrow::Borrow;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::marker::PhantomData;
 use winapi::shared::bcrypt::*;
 
@@ -245,8 +248,6 @@ impl<A: Algorithm, P: Parts> From<(KeyHandle, A)> for AsymmetricKey<A, P> {
     }
 }
 
-use crate::key::{RsaFullPrivate, RsaPublic};
-
 impl AsymmetricKey<Rsa, Private> {
     /// Attempts to export the key to a given blob type.
     /// # Example
@@ -254,8 +255,6 @@ impl AsymmetricKey<Rsa, Private> {
     /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
     /// # use win_crypto_ng::asymmetric::{Algorithm, Rsa, Private, AsymmetricKey};
     /// # use win_crypto_ng::asymmetric::Export;
-    /// # use win_crypto_ng::key::{BlobType, RsaPublic, RsaPrivate};
-    /// # use win_crypto_ng::key::{RsaKeyBlobFullPrivate, RsaKeyPublicView};
     ///
     /// let pair = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
     /// let blob = pair.as_public().export().unwrap();
@@ -269,15 +268,15 @@ impl AsymmetricKey<Rsa, Private> {
     /// assert_eq!(pub_exp, private.pub_exp());
     /// assert_eq!(modulus, private.modulus());
     /// ```
-    pub fn export_full(&self) -> Result<TypedBlob<RsaFullPrivate>> {
+    pub fn export_full(&self) -> Result<Box<DynStruct<RsaKeyFullPrivateBlob>>> {
         Ok(KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
             .try_into()
             .map_err(|_| crate::Error::BadData)?)
     }
 }
 
-pub trait Import<A: Algorithm, P: Parts> {
-    type Blob: Into<TypedBlob<BCRYPT_KEY_BLOB>>;
+pub trait Import<'a, A: Algorithm, P: Parts> {
+    type Blob: AsRef<DynStruct<ErasedKeyBlob>> + 'a;
     fn import(
         algo: A,
         provider: &AsymmetricAlgorithm,
@@ -287,7 +286,7 @@ pub trait Import<A: Algorithm, P: Parts> {
             return Err(crate::Error::InvalidParameter);
         };
 
-        KeyPair::import(provider, blob.into(), true)
+        KeyPair::import(provider, blob.as_ref(), true)
             .map(|pair| AsymmetricKey::<A, P>::from((pair.0, algo)))
     }
 }
@@ -295,21 +294,45 @@ pub trait Import<A: Algorithm, P: Parts> {
 macro_rules! import_blobs {
     ($(($algorithm: ty, $parts: ident, $blob: ty)),*$(,)?) => {
         $(
-        impl Import<$algorithm, $parts> for AsymmetricKey<$algorithm, $parts> {
+        impl<'a> Import<'a, $algorithm, $parts> for AsymmetricKey<$algorithm, $parts> {
             type Blob = $blob;
         }
         )*
     };
 }
 
+import_blobs!(
+    (AsymmetricAlgorithmId, Public, &'a DynStruct<ErasedKeyBlob>),
+    (AsymmetricAlgorithmId, Private, &'a DynStruct<ErasedKeyBlob>),
+    (Dh, Public, &'a DynStruct<DhKeyPublicBlob>),
+    (Dh, Private, &'a DynStruct<DhKeyPrivateBlob>),
+    (Dsa, Public, DsaPublicBlob),
+    (Dsa, Private, DsaPrivateBlob),
+    (Ecdh<NistP256>, Public, &'a DynStruct<EccKeyPublicBlob>),
+    (Ecdh<NistP256>, Private, &'a DynStruct<EccKeyPrivateBlob>),
+    (Ecdh<NistP384>, Public, &'a DynStruct<EccKeyPublicBlob>),
+    (Ecdh<NistP384>, Private, &'a DynStruct<EccKeyPrivateBlob>),
+    (Ecdh<NistP521>, Public, &'a DynStruct<EccKeyPublicBlob>),
+    (Ecdh<NistP521>, Private, &'a DynStruct<EccKeyPrivateBlob>),
+    (Ecdh<Curve25519>, Public, &'a DynStruct<EccKeyPublicBlob>),
+    (Ecdh<Curve25519>, Private, &'a DynStruct<EccKeyPrivateBlob>),
+    (Ecdsa<NistP256>, Public, &'a DynStruct<EccKeyPublicBlob>),
+    (Ecdsa<NistP256>, Private, &'a DynStruct<EccKeyPrivateBlob>),
+    (Ecdsa<NistP384>, Public, &'a DynStruct<EccKeyPublicBlob>),
+    (Ecdsa<NistP384>, Private, &'a DynStruct<EccKeyPrivateBlob>),
+    (Ecdsa<NistP521>, Public, &'a DynStruct<EccKeyPublicBlob>),
+    (Ecdsa<NistP521>, Private, &'a DynStruct<EccKeyPrivateBlob>),
+    (Rsa, Public, &'a DynStruct<RsaKeyPublicBlob>),
+    (Rsa, Private, &'a DynStruct<RsaKeyPrivateBlob>),
+);
+
 /// Attempts to export the key to a given blob type.
+///
 /// # Example
 /// ```
-/// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
-/// # use win_crypto_ng::asymmetric::{Algorithm, Rsa, Private, AsymmetricKey};
-/// # use win_crypto_ng::key::{BlobType, RsaPublic, RsaPrivate};
-/// # use win_crypto_ng::key::{RsaKeyBlobPrivate, RsaKeyPublicView};
-/// # use win_crypto_ng::asymmetric::Export;
+/// use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
+/// use win_crypto_ng::asymmetric::{Algorithm, Rsa, Private, AsymmetricKey};
+/// use win_crypto_ng::asymmetric::Export;
 ///
 /// let pair = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
 /// let blob = pair.as_public().export().unwrap();
@@ -324,25 +347,24 @@ macro_rules! import_blobs {
 /// assert_eq!(modulus, private.modulus());
 /// ```
 pub trait Export<A: Algorithm, P: Parts>: Borrow<AsymmetricKey<A, P>> {
-    type Blob: TryFrom<TypedBlob<BCRYPT_KEY_BLOB>>;
+    type Blob: KeyBlob + DynStructParts;
 
     #[doc(hidden)]
     fn blob_type(&self) -> BlobType;
 
-    fn export(&self) -> Result<Self::Blob> {
+    fn export(&self) -> Result<Box<DynStruct<Self::Blob>>> {
         let key = self.borrow();
         let blob_type = self.blob_type();
 
-        Ok(KeyPair::export(key.0.handle, blob_type)?
-            .try_into()
-            .map_err(|_| crate::Error::BadData)?)
+        let blob = KeyPair::export(key.0.handle, blob_type)?;
+        Ok(blob.try_into().map_err(|_| crate::Error::BadData)?)
     }
 }
 
 macro_rules! export_blobs {
     ($type: ty, $parts: ty, $blob: ty, $blob_type: expr) => {
-        impl Export<$type, $parts> for AsymmetricKey<$type, $parts> {
-            type Blob = TypedBlob<$blob>;
+        impl<'a> Export<$type, $parts> for AsymmetricKey<$type, $parts> {
+            type Blob = $blob;
 
             fn blob_type(&self) -> BlobType {
                 $blob_type
@@ -354,135 +376,135 @@ macro_rules! export_blobs {
 export_blobs!(
     AsymmetricAlgorithmId,
     Public,
-    BCRYPT_KEY_BLOB,
+    ErasedKeyBlob,
     BlobType::PublicKey
 );
 export_blobs!(
     AsymmetricAlgorithmId,
     Private,
-    BCRYPT_KEY_BLOB,
+    ErasedKeyBlob,
     BlobType::PrivateKey
 );
-export_blobs!(Dh, Public, DhPublic, BlobType::DhPublic);
-export_blobs!(Dh, Private, DhPrivate, BlobType::DhPrivate);
-export_blobs!(Dsa, Public, DsaPublic, BlobType::DsaPublic);
-export_blobs!(Dsa, Private, DsaPrivate, BlobType::DsaPrivate);
-export_blobs!(Ecdh<NistP256>, Public, EcdhP256Public, BlobType::EccPublic);
+export_blobs!(Dh, Public, DhKeyPublicBlob, BlobType::DhPublic);
+export_blobs!(Dh, Private, DhKeyPrivateBlob, BlobType::DhPrivate);
+export_blobs!(Dsa, Public, DsaKeyPublicBlob, BlobType::DsaPublic);
+export_blobs!(Dsa, Private, DsaKeyPrivateBlob, BlobType::DsaPrivate);
+export_blobs!(
+    Ecdh<NistP256>,
+    Public,
+    EccKeyPublicBlob,
+    BlobType::EccPublic
+);
 export_blobs!(
     Ecdh<NistP256>,
     Private,
-    EcdhP256Private,
+    EccKeyPrivateBlob,
     BlobType::EccPrivate
 );
-export_blobs!(Ecdh<NistP384>, Public, EcdhP384Public, BlobType::EccPublic);
+export_blobs!(
+    Ecdh<NistP384>,
+    Public,
+    EccKeyPublicBlob,
+    BlobType::EccPublic
+);
 export_blobs!(
     Ecdh<NistP384>,
     Private,
-    EcdhP384Private,
+    EccKeyPrivateBlob,
     BlobType::EccPrivate
 );
-export_blobs!(Ecdh<NistP521>, Public, EcdhP521Public, BlobType::EccPublic);
+export_blobs!(
+    Ecdh<NistP521>,
+    Public,
+    EccKeyPublicBlob,
+    BlobType::EccPublic
+);
 export_blobs!(
     Ecdh<NistP521>,
     Private,
-    EcdhP521Private,
+    EccKeyPrivateBlob,
     BlobType::EccPrivate
 );
 export_blobs!(
     Ecdsa<NistP256>,
     Public,
-    EcdsaP256Public,
+    EccKeyPublicBlob,
     BlobType::EccPublic
 );
 export_blobs!(
     Ecdsa<NistP256>,
     Private,
-    EcdsaP256Private,
+    EccKeyPrivateBlob,
     BlobType::EccPrivate
 );
 export_blobs!(
     Ecdsa<NistP384>,
     Public,
-    EcdsaP384Public,
+    EccKeyPublicBlob,
     BlobType::EccPublic
 );
 export_blobs!(
     Ecdsa<NistP384>,
     Private,
-    EcdsaP384Private,
+    EccKeyPrivateBlob,
     BlobType::EccPrivate
 );
 export_blobs!(
     Ecdsa<NistP521>,
     Public,
-    EcdsaP521Public,
+    EccKeyPublicBlob,
     BlobType::EccPublic
 );
 export_blobs!(
     Ecdsa<NistP521>,
     Private,
-    EcdsaP521Private,
+    EccKeyPrivateBlob,
     BlobType::EccPrivate
 );
-export_blobs!(Ecdh<Curve25519>, Public, EcdhPublic, BlobType::EccPublic);
-export_blobs!(Ecdh<Curve25519>, Private, EcdhPrivate, BlobType::EccPrivate);
-export_blobs!(Rsa, Public, RsaPublic, BlobType::RsaPublic);
-export_blobs!(Rsa, Private, RsaPrivate, BlobType::RsaPrivate);
+export_blobs!(
+    Ecdh<Curve25519>,
+    Public,
+    EccKeyPublicBlob,
+    BlobType::EccPublic
+);
+export_blobs!(
+    Ecdh<Curve25519>,
+    Private,
+    EccKeyPrivateBlob,
+    BlobType::EccPrivate
+);
+export_blobs!(Rsa, Public, RsaKeyPublicBlob, BlobType::RsaPublic);
+export_blobs!(Rsa, Private, RsaKeyPrivateBlob, BlobType::RsaPrivate);
 
 use crate::key::*;
 
 pub enum DsaPublicBlob {
-    V1(TypedBlob<DsaPublic>),
-    V2(TypedBlob<DsaPublicV2>),
+    V1(Box<DynStruct<DsaKeyPublicBlob>>),
+    V2(Box<DynStruct<DsaKeyPublicV2Blob>>),
 }
 
-impl Into<TypedBlob<BCRYPT_KEY_BLOB>> for DsaPublicBlob {
-    fn into(self) -> TypedBlob<BCRYPT_KEY_BLOB> {
+impl<'a> AsRef<DynStruct<ErasedKeyBlob>> for DsaPublicBlob {
+    fn as_ref(&self) -> &DynStruct<ErasedKeyBlob> {
         match self {
-            DsaPublicBlob::V1(v1) => v1.into(),
-            DsaPublicBlob::V2(v2) => v2.into(),
+            DsaPublicBlob::V1(v1) => v1.as_erased(),
+            DsaPublicBlob::V2(v2) => v2.as_erased(),
         }
     }
 }
 
 pub enum DsaPrivateBlob {
-    V1(TypedBlob<DsaPrivate>),
-    V2(TypedBlob<DsaPrivateV2>),
+    V1(Box<DynStruct<DsaKeyPrivateBlob>>),
+    V2(Box<DynStruct<DsaKeyPrivateV2Blob>>),
 }
 
-impl Into<TypedBlob<BCRYPT_KEY_BLOB>> for DsaPrivateBlob {
-    fn into(self) -> TypedBlob<BCRYPT_KEY_BLOB> {
+impl<'a> AsRef<DynStruct<ErasedKeyBlob>> for DsaPrivateBlob {
+    fn as_ref(&self) -> &DynStruct<ErasedKeyBlob> {
         match self {
-            DsaPrivateBlob::V1(v1) => v1.into(),
-            DsaPrivateBlob::V2(v2) => v2.into(),
+            DsaPrivateBlob::V1(v1) => v1.as_erased(),
+            DsaPrivateBlob::V2(v2) => v2.as_erased(),
         }
     }
 }
-
-import_blobs!(
-    (AsymmetricAlgorithmId, Public, TypedBlob<BCRYPT_KEY_BLOB>),
-    (AsymmetricAlgorithmId, Private, TypedBlob<BCRYPT_KEY_BLOB>),
-    (Dh, Public, TypedBlob<DhPublic>),
-    (Dh, Private, TypedBlob<DhPrivate>),
-    (Dsa, Public, DsaPublicBlob),
-    (Dsa, Private, DsaPrivateBlob),
-    (Ecdh<NistP256>, Public, TypedBlob<EcdhP256Public>),
-    (Ecdh<NistP256>, Private, TypedBlob<EcdhP256Private>),
-    (Ecdh<NistP384>, Public, TypedBlob<EcdhP384Public>),
-    (Ecdh<NistP384>, Private, TypedBlob<EcdhP384Private>),
-    (Ecdh<NistP521>, Public, TypedBlob<EcdhP521Public>),
-    (Ecdh<NistP521>, Private, TypedBlob<EcdhP521Private>),
-    (Ecdh<Curve25519>, Public, TypedBlob<EcdhPublic>),
-    (Ecdh<Curve25519>, Private, TypedBlob<EcdhPrivate>),
-    (Ecdsa<NistP256>, Public, TypedBlob<EcdsaP256Public>),
-    (Ecdsa<NistP256>, Private, TypedBlob<EcdsaP256Private>),
-    (Ecdsa<NistP384>, Public, TypedBlob<EcdsaP384Public>),
-    (Ecdsa<NistP384>, Private, TypedBlob<EcdsaP384Private>),
-    (Ecdsa<NistP521>, Public, TypedBlob<EcdsaP521Public>),
-    (Ecdsa<NistP521>, Private, TypedBlob<EcdsaP521Private>),
-    (Rsa, Public, TypedBlob<RsaPublic>),
-    (Rsa, Private, TypedBlob<RsaPrivate>),
-);
 
 #[cfg(test)]
 mod tests {
@@ -493,28 +515,22 @@ mod tests {
         let dynamic = AsymmetricKey::builder(AsymmetricAlgorithmId::Rsa)
             .key_bits(1024)
             .build()?;
-        let blob: TypedBlob<RsaPrivate> = dynamic.export().unwrap().try_into().unwrap();
-        let blob_clone: TypedBlob<RsaPrivate> = dynamic.export().unwrap().try_into().unwrap();
-        dbg!(&blob);
+        let blob = dynamic.export()?;
+        let blob = blob.try_into().unwrap_or_else(|_| panic!());
+
         let provider = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa)?;
-        let imported = AsymmetricKey::<_, Private>::import(
-            AsymmetricAlgorithmId::Rsa,
-            &provider,
-            blob_clone.into(),
-        )
-        .unwrap();
-        let imported_blob: TypedBlob<RsaPrivate> = imported.export().unwrap().try_into().unwrap();
+        let imported = AsymmetricKey::<_, Private>::import(Rsa, &provider, &blob)?;
+        let imported_blob = imported.export()?;
 
         assert_eq!(blob.modulus(), imported_blob.modulus());
         assert_eq!(blob.pub_exp(), imported_blob.pub_exp());
         assert_eq!(blob.prime1(), imported_blob.prime1());
 
         let key = AsymmetricKey::builder(Ecdsa(NistP521)).build()?;
-        let blob = key.export()?;
+        let blob = key.export().unwrap();
         dbg!(blob.x().len());
         dbg!(blob.y().len());
         dbg!(blob.d().len());
-        dbg!(blob);
 
         let key = AsymmetricKey::builder(Ecdh(Curve25519)).build()?;
         let blob = key.export()?;

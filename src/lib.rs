@@ -12,7 +12,7 @@ pub mod property;
 pub mod random;
 pub mod symmetric;
 
-mod helpers;
+pub mod helpers;
 
 // Compile and test the README
 doctest!("../README.md");
