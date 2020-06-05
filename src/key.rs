@@ -101,7 +101,7 @@ impl BlobType {
 impl<'a> TryFrom<&'a str> for BlobType {
     type Error = &'a str;
 
-    fn try_from(val: &'a str) -> std::result::Result<BlobType, Self::Error> {
+    fn try_from(val: &'a str) -> Result<BlobType, Self::Error> {
         match val {
             BCRYPT_AES_WRAP_KEY_BLOB => Ok(BlobType::AesWrapKey),
             BCRYPT_DH_PRIVATE_BLOB => Ok(BlobType::DhPrivate),

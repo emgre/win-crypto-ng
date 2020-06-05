@@ -97,7 +97,7 @@ impl AsymmetricAlgorithmId {
 impl<'a> TryFrom<&'a str> for AsymmetricAlgorithmId {
     type Error = &'a str;
 
-    fn try_from(val: &'a str) -> std::result::Result<AsymmetricAlgorithmId, Self::Error> {
+    fn try_from(val: &'a str) -> Result<AsymmetricAlgorithmId, Self::Error> {
         match val {
             BCRYPT_DH_ALGORITHM => Ok(Self::Dh),
             BCRYPT_DSA_ALGORITHM => Ok(Self::Dsa),
