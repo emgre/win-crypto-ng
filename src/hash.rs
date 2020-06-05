@@ -117,7 +117,7 @@ impl HashAlgorithmId {
 impl<'a> TryFrom<&'a str> for HashAlgorithmId {
     type Error = &'a str;
 
-    fn try_from(val: &'a str) -> std::result::Result<HashAlgorithmId, Self::Error> {
+    fn try_from(val: &'a str) -> Result<HashAlgorithmId, Self::Error> {
         match val {
             BCRYPT_SHA1_ALGORITHM => Ok(Self::Sha1),
             BCRYPT_SHA256_ALGORITHM => Ok(Self::Sha256),
