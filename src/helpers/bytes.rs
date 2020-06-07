@@ -1,46 +1,130 @@
 //! WIP
 
+use core::alloc::Layout;
+use core::{mem, ptr, slice};
+
 /// Checks if a pointer can be a valid Rust reference.
-fn ptr_ref_cast<T, U>(ptr: *const U) -> *const T {
-    assert_ne!(ptr, std::ptr::null());
-    assert_eq!(ptr as usize % std::mem::align_of::<T>(), 0);
+pub(crate) fn ptr_ref_cast<T, U>(ptr: *const U) -> *const T {
+    assert_ne!(ptr, ptr::null());
+    assert_eq!(ptr as usize % mem::align_of::<T>(), 0);
     ptr as *const _
 }
 
-pub trait AsBytes {
-    fn as_bytes(&self) -> &[u8];
+/// Attempts to cast the pointer to byte slice to a pointer of a generic slice.
+/// Adjusts the length metadata as required.
+/// Panics if the pointer is null.
+///
+/// # Safety
+///
+pub unsafe fn ptr_slice_cast<T>(ptr: *const [u8]) -> *const [T] {
+    assert_ne!(ptr as *const (), ptr::null());
+    // SAFETY: [u8] is 1-byte aligned so no need to check that before deref
+    let len = (&*ptr).len();
+
+    let new_len = len * mem::size_of::<u8>() / mem::size_of::<T>();
+
+    let slice = slice::from_raw_parts(ptr as *const T, new_len);
+    slice as *const _ as *const [T]
 }
 
-// TODO: Add IntoBytes
+/// Marker trait for types that can be safely converted to bytes.
+///
+/// # Safety
+/// Implementee MUST be `#[repr(C)]` and:
+/// - not contain any pointer types that are dereferenced,
+/// - itself or any of its members MUST NOT implement a custom destructor,
+/// - be inhabited,
+/// - allow any bit pattern
+///
+/// ## Layout
+/// Implementee also needs to be layout-compatible with [u8].
+pub unsafe trait AsBytes {
+    fn as_bytes(&self) -> &[u8] {
+        let len = mem::size_of_val(self);
+        // SAFETY: Guaranteed by documented unsafe impl invariants.
+        unsafe { slice::from_raw_parts(self as *const _ as *const u8, len) }
+    }
 
-// TODO: Add error handling
+    fn into_bytes(self: Box<Self>) -> Box<[u8]> {
+        let len = mem::size_of_val(self.as_ref());
+        // SAFETY: Guaranteed by documented unsafe impl invariants of `AsBytes`.
+        let ptr = Box::into_raw(self);
+        unsafe {
+            let slice = slice::from_raw_parts_mut(ptr as *mut _ as *mut u8, len);
+
+            Box::from_raw(slice)
+        }
+    }
+}
+
+/// Marker trait for types that can be safely converted to bytes.
 pub unsafe trait FromBytes {
-    fn from_bytes(bytes: &[u8]) -> &Self;
-    fn from_boxed(boxed: Box<[u8]>) -> Box<Self>;
+    /// Specified the minimum layout requirements for the allocation:
+    /// - is at least as big as `MIN_LAYOUT.size()`
+    /// - reference/pointer is at least as aligned as `MIN_LAYOUT.align()`
+    ///
+    /// For DSTs, final size should be exactly the same as the allocation's.
+    const MIN_LAYOUT: core::alloc::Layout;
+
+    fn from_bytes(bytes: &[u8]) -> &Self {
+        // Make sure the allocation meets the expected layout requirements
+        assert!(bytes.len() >= Self::MIN_LAYOUT.size(), 0);
+        assert_eq!(bytes.as_ptr() as usize % Self::MIN_LAYOUT.align(), 0);
+
+        let old_size = mem::size_of_val(bytes);
+        // SAFETY: It's up to the implementer to provide a sound
+        // `Self::ptr_cast` implementation.
+        let new = unsafe { &*Self::ptr_cast(bytes) };
+
+        let new_size = mem::size_of_val(new);
+        // Make sure we don't leak data/forget any information when adjusting
+        // the (possibly wide) pointer
+        assert_eq!(old_size, new_size);
+
+        new
+    }
+
+    fn from_boxed(boxed: Box<[u8]>) -> Box<Self> {
+        // Make sure the allocation meets the expected layout requirements
+        assert!(boxed.len() >= Self::MIN_LAYOUT.size(), 0);
+        assert_eq!(boxed.as_ptr() as usize % Self::MIN_LAYOUT.align(), 0);
+
+        let old_size = mem::size_of_val(boxed.as_ref());
+
+        let ptr = Box::into_raw(boxed);
+        // SAFETY: It's up to the implementer to provide a sound
+        // `Self::ptr_cast` implementation.
+        let new = unsafe { Box::from_raw(Self::ptr_cast(ptr) as *mut Self) };
+
+        let new_size = mem::size_of_val(new.as_ref());
+        // Make sure we don't leak data/forget any information when adjusting
+        // the (possibly wide) pointer
+        assert_eq!(old_size, new_size);
+
+        new
+    }
+
+    #[doc(hidden)]
+    unsafe fn ptr_cast(source: *const [u8]) -> *const Self;
 }
 
 unsafe impl FromBytes for [u16] {
-    fn from_bytes(_bytes: &[u8]) -> &Self {
-        unimplemented!()
-    }
-
-    fn from_boxed(boxed: Box<[u8]>) -> Box<[u16]> {
-        assert_eq!(boxed.len() % std::mem::size_of::<u16>(), 0);
-        assert_eq!(boxed.as_ptr() as usize % std::mem::align_of::<u16>(), 0);
-
-        // Account for possibly fewer slice elements, e.g. [u16] will
-        // have 2 times fewer elements than [u8] for the same bytes.
-        let new_len = boxed.len() * std::mem::size_of::<u8>() / std::mem::size_of::<u16>();
-        let ptr = Box::into_raw(boxed);
-
-        #[allow(clippy::cast_ptr_alignment)] // alignment of pointer checked above
-        let slice = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u16, new_len) };
-
-        unsafe { Box::from_raw(slice as *mut Self) }
+    // Allow for empty slices but require correct alignment
+    const MIN_LAYOUT: Layout =
+        unsafe { Layout::from_size_align_unchecked(0, mem::align_of::<u16>()) };
+    unsafe fn ptr_cast(source: *const [u8]) -> *const Self {
+        ptr_slice_cast(source)
     }
 }
 
 unsafe impl FromBytes for [u8] {
+    // Allow for empty slices but require correct alignment
+    const MIN_LAYOUT: Layout =
+        unsafe { Layout::from_size_align_unchecked(0, mem::align_of::<u8>()) };
+    unsafe fn ptr_cast(source: *const [u8]) -> *const [u8] {
+        source
+    }
+
     fn from_bytes(bytes: &[u8]) -> &Self {
         bytes
     }
@@ -49,28 +133,36 @@ unsafe impl FromBytes for [u8] {
     }
 }
 
-unsafe impl FromBytes for u32 {
-    fn from_bytes(bytes: &[u8]) -> &Self {
-        assert!(bytes.len() >= 4);
+/// Marker trait that can be safely converted from and into bytes.
+///
+/// Automatically implements [AsBytes] and [FromBytes].
+/// # Safety
+/// See documentation for [AsBytes] for safety invariants that need to be upheld.
+pub unsafe trait Pod: Sized {}
 
-        let ptr = bytes.as_ptr();
-        // NOTE: Assumes native endianness
-        unsafe { &*ptr_ref_cast(ptr) }
-    }
+unsafe impl<T> AsBytes for T where T: Pod {}
+unsafe impl<T> FromBytes for T
+where
+    T: Pod,
+{
+    const MIN_LAYOUT: Layout = Layout::new::<Self>();
 
-    fn from_boxed(_boxed: Box<[u8]>) -> Box<Self> {
-        unimplemented!()
-    }
-}
-
-unsafe impl FromBytes for winapi::shared::bcrypt::BCRYPT_KEY_LENGTHS_STRUCT {
-    fn from_bytes(bytes: &[u8]) -> &Self {
-        assert!(bytes.len() >= std::mem::size_of::<Self>());
-
-        unsafe { &*ptr_ref_cast(bytes.as_ptr()) }
-    }
-
-    fn from_boxed(_boxed: Box<[u8]>) -> Box<Self> {
-        unimplemented!()
+    unsafe fn ptr_cast(ptr: *const [u8]) -> *const Self {
+        ptr_ref_cast(ptr as *const ())
     }
 }
+
+use winapi::shared::bcrypt;
+unsafe impl Pod for u32 {} // Ignores endianness
+unsafe impl Pod for bcrypt::BCRYPT_KEY_LENGTHS_STRUCT {}
+
+unsafe impl Pod for bcrypt::BCRYPT_DH_PARAMETER_HEADER {}
+unsafe impl Pod for bcrypt::BCRYPT_DSA_PARAMETER_HEADER {}
+unsafe impl Pod for bcrypt::BCRYPT_DSA_PARAMETER_HEADER_V2 {}
+
+unsafe impl Pod for bcrypt::BCRYPT_KEY_BLOB {}
+unsafe impl Pod for bcrypt::BCRYPT_DH_KEY_BLOB {}
+unsafe impl Pod for bcrypt::BCRYPT_DSA_KEY_BLOB {}
+unsafe impl Pod for bcrypt::BCRYPT_DSA_KEY_BLOB_V2 {}
+unsafe impl Pod for bcrypt::BCRYPT_ECCKEY_BLOB {}
+unsafe impl Pod for bcrypt::BCRYPT_RSAKEY_BLOB {}
