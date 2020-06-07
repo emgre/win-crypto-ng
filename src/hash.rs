@@ -45,8 +45,9 @@
 //! [`finish`]: struct.Hash.html#method.finish
 
 use crate::buffer::Buffer;
-use crate::helpers::{AlgoHandle, Handle, WideCString};
-use crate::property::{AlgorithmName, HashLength, ObjectLength};
+use crate::handle::{AlgoHandle, Handle};
+use crate::helpers::WideCString;
+use crate::property::{Access, AlgorithmName, HashLength, ObjectLength};
 use crate::{Error, Result};
 use std::convert::TryFrom;
 use std::ptr::null_mut;

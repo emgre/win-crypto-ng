@@ -1,6 +1,7 @@
 //! Type-safe builders to generate various asymmetric keys.
 
-use crate::helpers::{Blob, Handle, WideCString};
+use crate::handle::Handle;
+use crate::helpers::{Blob, WideCString};
 use crate::key::ErasedKeyBlob;
 use crate::key::{BlobType, KeyHandle};
 use crate::{Error, Result};

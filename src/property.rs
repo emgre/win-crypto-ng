@@ -1,9 +1,97 @@
 //! Named properties support for CNG objects.
 
-use crate::helpers::FromBytes;
-use winapi::shared::bcrypt;
+use crate::handle::Handle;
+use crate::helpers::{FromBytes, WideCString};
+use crate::{Error, Result};
+use core::mem::{self, MaybeUninit};
+use core::ptr;
+use winapi::shared::bcrypt::*;
 use winapi::shared::minwindef::DWORD;
-use winapi::shared::ntdef::WCHAR;
+use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, WCHAR};
+
+impl<T: Handle> Access for T {}
+
+/// Supports setting and getting named properties for CNG objects.
+pub trait Access: Handle {
+    fn set_property<T: Property>(&self, value: &T::Value) -> Result<()> {
+        let property = WideCString::from(T::IDENTIFIER);
+        unsafe {
+            Error::check(BCryptSetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                value as *const _ as PUCHAR,
+                mem::size_of_val(value) as ULONG,
+                0,
+            ))
+        }
+    }
+
+    fn get_property<T: Property>(&self) -> Result<T::Value>
+    where
+        T::Value: Sized,
+    {
+        let property = WideCString::from(T::IDENTIFIER);
+        let mut size = mem::size_of::<T::Value>() as u32;
+
+        // We are not expected to allocate extra trailing data, so construct the
+        // value and return it inline (especially important for `Copy` types)
+        let mut result = MaybeUninit::<T::Value>::uninit();
+
+        unsafe {
+            Error::check(BCryptGetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                result.as_mut_ptr() as *mut _,
+                size,
+                &mut size,
+                0,
+            ))?;
+        }
+        // SAFETY: Verify that the API call has written the exact amount of
+        // bytes, so that we can conclude it's been entirely initialized
+        assert_eq!(size as usize, mem::size_of::<T::Value>());
+
+        Ok(unsafe { result.assume_init() })
+    }
+
+    fn get_property_unsized<T: Property>(&self) -> Result<Box<T::Value>> {
+        let property = WideCString::from(T::IDENTIFIER);
+
+        let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
+        let mut result = vec![0u8; size as usize].into_boxed_slice();
+
+        unsafe {
+            Error::check(BCryptGetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                result.as_mut_ptr(),
+                size,
+                &mut size,
+                0,
+            ))?;
+        }
+        // SAFETY: Verify that the API call has written the exact amount of
+        // bytes, so that we can conclude it's been entirely initialized
+        assert_eq!(size as usize, result.len());
+
+        Ok(FromBytes::from_boxed(result))
+    }
+}
+
+fn get_property_size(handle: BCRYPT_HANDLE, prop: LPCWSTR) -> Result<ULONG> {
+    let mut size: ULONG = 0;
+    unsafe {
+        Error::check(BCryptGetProperty(
+            handle,
+            prop,
+            ptr::null_mut(),
+            0,
+            &mut size,
+            0,
+        ))?;
+    }
+    Ok(size)
+}
 
 // Marker trait for any type that can be used as the CNG property.
 pub trait Property {
@@ -18,7 +106,7 @@ pub trait Property {
 /// A null-terminated Unicode string that contains the name of the algorithm.
 pub enum AlgorithmName {}
 impl Property for AlgorithmName {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_ALGORITHM_NAME;
+    const IDENTIFIER: &'static str = BCRYPT_ALGORITHM_NAME;
     type Value = [WCHAR];
 }
 
@@ -30,7 +118,7 @@ impl Property for AlgorithmName {
 /// applies to block cipher algorithms. This data type is a **DWORD**.
 pub enum BlockLength {}
 impl Property for BlockLength {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_BLOCK_LENGTH;
+    const IDENTIFIER: &'static str = BCRYPT_BLOCK_LENGTH;
     type Value = DWORD;
 }
 
@@ -52,13 +140,13 @@ impl Property for BlockLength {
 /// | BCRYPT_CHAIN_MODE_NA  | L"ChainingModeN/A" | The algorithm does not support chaining.                                                                                                             |
 pub enum ChainingMode {}
 impl Property for ChainingMode {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_CHAINING_MODE;
+    const IDENTIFIER: &'static str = BCRYPT_CHAINING_MODE;
     type Value = [WCHAR];
 }
 
 pub enum EccCurveName {}
 impl Property for EccCurveName {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_ECC_CURVE_NAME;
+    const IDENTIFIER: &'static str = BCRYPT_ECC_CURVE_NAME;
     type Value = [WCHAR];
 }
 
@@ -70,7 +158,7 @@ impl Property for EccCurveName {
 /// a **DWORD**.
 pub enum HashLength {}
 impl Property for HashLength {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_HASH_LENGTH;
+    const IDENTIFIER: &'static str = BCRYPT_HASH_LENGTH;
     type Value = DWORD;
 }
 
@@ -82,7 +170,7 @@ impl Property for HashLength {
 /// type is a **DWORD**.
 pub enum KeyLength {}
 impl Property for KeyLength {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_KEY_LENGTH;
+    const IDENTIFIER: &'static str = BCRYPT_KEY_LENGTH;
     type Value = DWORD;
 }
 
@@ -97,8 +185,8 @@ impl Property for KeyLength {
 /// [BCRYPT_KEY_LENGTHS_STRUCT]: https://docs.microsoft.com/windows/desktop/api/Bcrypt/ns-bcrypt-bcrypt_key_lengths_struct
 pub enum KeyLengths {}
 impl Property for KeyLengths {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_KEY_LENGTHS;
-    type Value = bcrypt::BCRYPT_KEY_LENGTHS_STRUCT;
+    const IDENTIFIER: &'static str = BCRYPT_KEY_LENGTHS;
+    type Value = BCRYPT_KEY_LENGTHS_STRUCT;
 }
 
 /// [**BCRYPT_OBJECT_LENGTH**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_OBJECT_LENGTH)
@@ -114,18 +202,18 @@ impl Property for KeyLengths {
 /// you can allocate memory for the object created by the provider.
 pub enum ObjectLength {}
 impl Property for ObjectLength {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_OBJECT_LENGTH;
+    const IDENTIFIER: &'static str = BCRYPT_OBJECT_LENGTH;
     type Value = DWORD;
 }
 
 pub enum DsaParameters {}
 impl Property for DsaParameters {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_DSA_PARAMETERS;
+    const IDENTIFIER: &'static str = BCRYPT_DSA_PARAMETERS;
     type Value = [u8];
 }
 
 pub enum DhParameters {}
 impl Property for DhParameters {
-    const IDENTIFIER: &'static str = bcrypt::BCRYPT_DH_PARAMETERS;
+    const IDENTIFIER: &'static str = BCRYPT_DH_PARAMETERS;
     type Value = [u8];
 }
