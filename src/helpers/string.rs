@@ -9,15 +9,6 @@ pub struct WideCString {
 }
 
 impl WideCString {
-    pub fn from_str(value: &str) -> Self {
-        Self {
-            inner: OsStr::new(value)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect(),
-        }
-    }
-
     pub fn from_bytes_with_nul(val: Box<[u16]>) -> Self {
         if let Some(last) = val.iter().last() {
             assert_eq!(last, &0u16);
@@ -34,6 +25,17 @@ impl WideCString {
 
     pub fn as_ptr(&self) -> LPCWSTR {
         self.inner.as_ptr()
+    }
+}
+
+impl From<&str> for WideCString {
+    fn from(value: &str) -> WideCString {
+        Self {
+            inner: OsStr::new(value)
+                .encode_wide()
+                .chain(Some(0).into_iter())
+                .collect(),
+        }
     }
 }
 
