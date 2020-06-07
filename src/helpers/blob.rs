@@ -50,14 +50,7 @@ impl<'a, T: BlobLayout> Blob<T> {
     }
 
     pub(crate) unsafe fn ref_cast<U: BlobLayout>(&self) -> &Blob<U> {
-        let len = std::mem::size_of_val(self);
-        // Adjust the length component
-        let tail_len = len - std::mem::size_of::<U::Header>();
-
-        let ptr = self as *const _;
-        let slice = std::slice::from_raw_parts(ptr as *const U::Header, tail_len);
-
-        &*(slice as *const _ as *const Blob<U>)
+        Blob::<U>::from_bytes(self.as_bytes())
     }
 }
 

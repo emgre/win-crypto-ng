@@ -180,20 +180,7 @@ where
             return Err(self);
         }
 
-        // Adjust the length component
-        let header_len = std::mem::size_of::<U::Header>();
-        let tail_len = std::mem::size_of_val(self.as_ref()) - header_len;
-
-        // Construct a custom slice-based DST
-        let ptr = Box::into_raw(self);
-        // SAFETY:
-        // 1. Compiler enforces compatibility of DST pointer metadata
-        //    (so our DST wide pointer has the same layout as slice pointer)
-        // 2. The lifetime of both references is the same
-        unsafe {
-            let slice = std::slice::from_raw_parts_mut(ptr as *mut (), tail_len);
-            Ok(Box::from_raw(slice as *mut [()] as *mut Blob<U>))
-        }
+        Ok(Blob::<U>::from_boxed(self.into_bytes()))
     }
 }
 
