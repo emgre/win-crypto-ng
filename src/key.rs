@@ -1,49 +1,10 @@
-//! Cryptographic key handle
+//! Cryptographic key blobs
 
 use crate::blob;
-use crate::handle::Handle;
 use crate::helpers::blob::{Blob, BlobLayout};
-use std::convert::TryFrom;
-use std::ptr::null_mut;
+use core::convert::TryFrom;
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::ULONG;
-
-/// Cryptographic key handle used in (a)symmetric algorithms
-pub struct KeyHandle {
-    pub(crate) handle: BCRYPT_KEY_HANDLE,
-}
-
-impl KeyHandle {
-    pub fn new() -> Self {
-        Self { handle: null_mut() }
-    }
-}
-
-impl Drop for KeyHandle {
-    fn drop(&mut self) {
-        if !self.handle.is_null() {
-            unsafe {
-                BCryptDestroyKey(self.handle);
-            }
-        }
-    }
-}
-
-impl Default for KeyHandle {
-    fn default() -> Self {
-        KeyHandle::new()
-    }
-}
-
-impl Handle for KeyHandle {
-    fn as_ptr(&self) -> BCRYPT_KEY_HANDLE {
-        self.handle
-    }
-
-    fn as_mut_ptr(&mut self) -> *mut BCRYPT_KEY_HANDLE {
-        &mut self.handle
-    }
-}
 
 /// Type of a key blob.
 pub enum BlobType {
