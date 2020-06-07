@@ -130,11 +130,14 @@ impl<'a> TryFrom<&'a str> for BlobType {
 }
 
 /// Marker trait for values containing CNG key blob types.
-pub trait KeyBlob: Sized {
+pub unsafe trait KeyBlob: Sized {
+    // TODO: Require : DynStructParts + Self::Header: AsRef<BCRYPT_KEY_BLOB>
+    // This can be used to cheaply get the magic and to get rid of `unsafe`
+    // trait and make the as_erased call actually safe
     const VALID_MAGIC: &'static [ULONG];
 
     fn is_magic_valid(magic: ULONG) -> bool {
-        let accepts_all = Self::VALID_MAGIC == &[];
+        let accepts_all = Self::VALID_MAGIC == [];
         accepts_all || Self::VALID_MAGIC.iter().any(|&x| x == magic)
     }
 }
@@ -161,16 +164,10 @@ where
     }
 
     pub fn as_erased(&self) -> &DynStruct<ErasedKeyBlob> {
-        let header_len = std::mem::size_of::<<ErasedKeyBlob as DynStructParts>::Header>();
-        let tail_len = std::mem::size_of_val(self) - header_len;
-
-        let slice = unsafe { std::slice::from_raw_parts(self as *const _ as *const (), tail_len) };
-        // Construct a custom slice-based DST
-        // SAFETY:
-        // 1. Compiler enforces compatibility of DST pointer metadata
-        //    (so our DST wide pointer has the same layout as slice pointer)
-        // 2. The lifetime of both references is the same
-        unsafe { &*(slice as *const [()] as *const DynStruct<ErasedKeyBlob>) }
+        // SAFETY: The `KeyBlob` trait is only implemented for types that also
+        // implement DynStructParts and whose header extends the basic
+        // BCRYPT_KEY_BLOB, which DynStruct<ErasedKeyBlob> wraps
+        unsafe { self.ref_cast() }
     }
 
     // NOTE: TryInto can't be implemented due to blanket generic TryFrom impl,
@@ -212,7 +209,7 @@ macro_rules! key_blobs {
         }
 
         $(
-            impl KeyBlob for $name {
+            unsafe impl KeyBlob for $name {
                 const VALID_MAGIC: &'static [ULONG] = &[$($($val),*)?];
             }
 

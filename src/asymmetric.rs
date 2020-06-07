@@ -236,9 +236,8 @@ impl<A: Algorithm, P: Parts> AsymmetricKey<A, P> {
 
 impl<A: Algorithm> AsymmetricKey<A, Private> {
     pub fn as_public(&self) -> &AsymmetricKey<A, Public> {
-        // FIXME: This should be sound but are there any better ways to convert
-        // the *reference* itself?
-        unsafe { std::mem::transmute(self) }
+        // NOTE: This assumes that Private is always a key pair
+        unsafe { &*(self as *const _ as *const AsymmetricKey<A, Public>) }
     }
 }
 
