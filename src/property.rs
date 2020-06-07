@@ -1,4 +1,4 @@
-//! Named properties support for CNG objects.
+//! Named properties for CNG objects.
 
 use crate::handle::Handle;
 use crate::helpers::{FromBytes, WideCString};

@@ -1,4 +1,11 @@
-//! WIP
+//! Byte fiddling utilities.
+//!
+//! Define [FromBytes] and [AsBytes] traits, which allow for safe data conversion
+//! assuming the data meets certain layout-specific restrictions.
+//! See documentation for [AsBytes] for more details.
+//!
+//! These traits are implemented automatically for sized data structures if they
+//! implement [Pod] trait.
 
 use core::alloc::Layout;
 use core::{mem, ptr, slice};

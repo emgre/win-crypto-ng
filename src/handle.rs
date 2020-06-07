@@ -1,3 +1,5 @@
+//! CNG object handles.
+
 use core::ptr;
 
 use winapi::shared::bcrypt::*;
