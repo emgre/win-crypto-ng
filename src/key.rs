@@ -1,8 +1,8 @@
 //! Cryptographic key handle
 
 use crate::blob;
+use crate::handle::Handle;
 use crate::helpers::blob::{Blob, BlobLayout};
-use crate::helpers::Handle;
 use std::convert::TryFrom;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;

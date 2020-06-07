@@ -23,7 +23,7 @@
 //! [`system_preferred`]: struct.RandomNumberGenerator.html#method.system_preferred
 //! [`gen_random`]: struct.RandomNumberGenerator.html#method.gen_random
 
-use crate::helpers::{AlgoHandle, Handle};
+use crate::handle::{AlgoHandle, Handle};
 use crate::Error;
 use core::convert::TryFrom;
 use core::fmt;

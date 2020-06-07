@@ -7,12 +7,11 @@
 //!
 //! > **NOTE**: This is currently a stub and should be expanded.
 
-use crate::helpers::blob::Blob;
-use crate::helpers::blob::BlobLayout;
-use crate::helpers::{AlgoHandle, Handle, WideCString};
-use crate::key::ErasedKeyBlob;
-use crate::key::{BlobType, KeyHandle};
-use crate::property::{AlgorithmName, EccCurveName};
+use crate::handle::AlgoHandle;
+use crate::helpers::blob::{Blob, BlobLayout};
+use crate::helpers::WideCString;
+use crate::key::{BlobType, ErasedKeyBlob, KeyHandle};
+use crate::property::{Access, AlgorithmName, EccCurveName};
 use crate::Result;
 use std::borrow::Borrow;
 use std::convert::TryFrom;
