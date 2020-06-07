@@ -1,4 +1,4 @@
-use super::AsBytes;
+use crate::helpers::bytes::{AsBytes, FromBytes};
 
 /// C-compatible dynamic inline structure.
 ///
@@ -19,21 +19,21 @@ pub struct DynStruct<T: DynStructParts>(T::Header, [u8]);
 /// Marker trait for dynamic struct layouts prefixed with `Self::Header` type
 /// of a statically-known size. Used in tandem with `DynStruct`.
 pub trait DynStructParts {
-    type Header;
+    type Header: AsBytes + FromBytes;
 }
 
 impl<'a, T: DynStructParts> DynStruct<T> {
     pub fn header(&self) -> &T::Header {
         // SAFETY: The only way to construct `DynStruct` is via
-        // `Self::from_boxed`, which requires that the source reference is at
-        // least pointer-aligned, and since `DynStruct` is `#[repr(C)]`, so is
-        // its first field, and so reference to it will also be at least
-        // pointer-aligned.
+        // `Self::from_boxed`, which requires that the source reference is
+        // aligned at least as `T::Header` and since `DynStruct` is
+        // `#[repr(C)]` (and so is `T::Header`, because it  implements `AsBytes`
+        // which requires which requires being `#[repr(C)]`), so the reference
+        // to its first field will be aligned at least as `T::Header`.
         unsafe { &self.0 }
     }
 
-    #[doc(hidden)]
-    pub fn tail(&self) -> &[u8] {
+    pub(crate) fn tail(&self) -> &[u8] {
         &self.1
     }
 
@@ -41,7 +41,15 @@ impl<'a, T: DynStructParts> DynStruct<T> {
         AsBytes::as_bytes(self)
     }
 
-    pub unsafe fn ref_cast<U: DynStructParts>(&self) -> &DynStruct<U> {
+    pub fn into_bytes(self: Box<Self>) -> Box<[u8]> {
+        AsBytes::into_bytes(self)
+    }
+
+    pub fn from_boxed(boxed: Box<[u8]>) -> Box<Self> {
+        FromBytes::from_boxed(boxed)
+    }
+
+    pub(crate) unsafe fn ref_cast<U: DynStructParts>(&self) -> &DynStruct<U> {
         let len = std::mem::size_of_val(self);
         // Adjust the length component
         let tail_len = len - std::mem::size_of::<U::Header>();
@@ -53,62 +61,26 @@ impl<'a, T: DynStructParts> DynStruct<T> {
     }
 }
 
-impl<T: DynStructParts> AsBytes for DynStruct<T> {
-    // TODO: Add T::Header: AsBytes
-    fn as_bytes(&self) -> &[u8] {
-        let len = std::mem::size_of_val(self);
-        // SAFETY: DynStruct is C-compatible - header is assumed to be a
-        // POD that's #[repr(C)] and the tail are regular bytes.
-        // Therefore, it's safe to view the entire allocation as bytes
-        unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, len) }
-    }
-}
+// SAFETY: The entire struct is `#[repr(C)]` and so is the header (because it
+// implements `AsBytes` as well)
+unsafe impl<T: DynStructParts> AsBytes for DynStruct<T> {}
 
-impl<'a, T: DynStructParts> DynStruct<T> {
-    pub fn into_bytes(self: Box<Self>) -> Box<[u8]> {
-        let len = std::mem::size_of_val(self.as_ref());
-        let ptr = Box::into_raw(self);
-        // SAFETY: DynStruct is C-compatible - header is `#[repr(C)]` and the
-        // tail are regular bytes. Moreover, it's `#[repr(packed)]` so it's
-        // layout-compatible with Box<[u8]>.
-        unsafe {
-            let slice = std::slice::from_raw_parts_mut(ptr as *mut u8, len);
-            Box::from_raw(slice as *mut [u8])
-        }
-    }
-}
+unsafe impl<T: DynStructParts> FromBytes for DynStruct<T> {
+    // Require that the allocation is at least as aligned as its header to
+    // safely reference it as the first field. (despite
+    // `DynStruct` being technically `#[repr(packed)]`)
+    const MIN_LAYOUT: std::alloc::Layout = std::alloc::Layout::new::<T::Header>();
 
-impl<'a, T: DynStructParts> DynStruct<T> {
-    pub fn from_boxed(boxed: Box<[u8]>) -> Box<Self>
-    where
-        T::Header: 'static,
-    {
-        let old_size = std::mem::size_of_val(boxed.as_ref());
-        // assert_eq!(boxed.len() % std::mem::align_of::<$header>(), 0);
+    unsafe fn ptr_cast(source: *const [u8]) -> *const Self {
+        assert_ne!(source as *const (), std::ptr::null());
+        // SAFETY: [u8] is 1-byte aligned so no need to check before deref
+        let len = (&*source).len();
+        let tail_len = len - std::mem::size_of::<T::Header>();
 
-        // SAFETY: Require that the pointer is at least as aligned as the header
-        // to safely reference its first field (header) with aligned load.
-        // See `DynStruct::header` for more details.
-        // NOTE: That's despite `DynStruct` being `#[repr(packed)]`, to
-        // guarantee layout-compatibility with [u8].
-        assert_eq!(
-            boxed.as_ptr() as usize % std::mem::align_of::<T::Header>(),
-            0
-        );
-        assert!(boxed.len() >= std::mem::size_of::<T::Header>());
-
-        let tail_len = boxed.len() - std::mem::size_of::<T::Header>();
-        // Construct a custom slice-based DST
-        let ptr = Box::into_raw(boxed);
-        let new = unsafe {
-            let slice = std::slice::from_raw_parts_mut(ptr as *mut T::Header, tail_len);
-
-            Box::from_raw(slice as *mut _ as *mut Self)
-        };
-        let new_size = std::mem::size_of_val(new.as_ref());
-        assert_eq!(old_size, new_size);
-
-        new
+        // SAFETY: This assumes that the pointer to slices and slice-based DSTs
+        // have the same metadata (verified by the compiler at compile-time)
+        let slice = std::slice::from_raw_parts(source as *const T::Header, tail_len);
+        slice as *const [T::Header] as *const _
     }
 }
 
@@ -235,6 +207,7 @@ macro_rules! dyn_struct {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::helpers::bytes::Pod;
 
     #[test]
     fn test() {
@@ -249,6 +222,8 @@ mod tests {
                 some_member[count], // Refers to run-time value of `count` field
             }
         }
+
+        unsafe impl Pod for Header {}
 
         let inline = DynStruct::<MyDynStruct>::clone_from_parts(
             &Header { count: 4 },
