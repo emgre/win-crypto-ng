@@ -144,7 +144,7 @@ impl AsymmetricAlgorithm {
             | AsymmetricAlgorithmId::Ecdsa(NamedCurve::NistP384)
             | AsymmetricAlgorithmId::Ecdsa(NamedCurve::NistP521) => {}
             AsymmetricAlgorithmId::Ecdh(curve) | AsymmetricAlgorithmId::Ecdsa(curve) => {
-                let property = WideCString::from_str(curve.as_str());
+                let property = WideCString::from(curve.as_str());
 
                 handle.set_property::<EccCurveName>(property.as_slice_with_nul())?;
             }

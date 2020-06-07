@@ -17,7 +17,7 @@ pub trait Handle {
     fn as_mut_ptr(&mut self) -> *mut BCRYPT_HANDLE;
 
     fn set_property<T: Property>(&self, value: &T::Value) -> Result<()> {
-        let property = WideCString::from_str(T::IDENTIFIER);
+        let property = WideCString::from(T::IDENTIFIER);
         unsafe {
             Error::check(BCryptSetProperty(
                 self.as_ptr(),
@@ -33,7 +33,7 @@ pub trait Handle {
     where
         T::Value: Sized,
     {
-        let property = WideCString::from_str(T::IDENTIFIER);
+        let property = WideCString::from(T::IDENTIFIER);
         // Determine how much data we need to allocate for the return value
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
 
@@ -58,7 +58,7 @@ pub trait Handle {
     }
 
     fn get_property_unsized<T: Property>(&self) -> Result<Box<T::Value>> {
-        let property = WideCString::from_str(T::IDENTIFIER);
+        let property = WideCString::from(T::IDENTIFIER);
 
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
         let mut result = vec![0u8; size as usize].into_boxed_slice();
@@ -94,7 +94,7 @@ impl AlgoHandle {
     pub fn open(id: &str) -> Result<Self> {
         let mut handle = null_mut::<VOID>();
         unsafe {
-            let id_str = WideCString::from_str(id);
+            let id_str = WideCString::from(id);
             Error::check(BCryptOpenAlgorithmProvider(
                 &mut handle,
                 id_str.as_ptr(),
