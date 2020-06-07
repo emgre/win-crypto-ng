@@ -43,7 +43,7 @@
 //! [`SymmetricAlgorithm.valid_key_sizes`]: struct.SymmetricAlgorithm.html#method.valid_key_sizes
 
 use crate::buffer::Buffer;
-use crate::helpers::{AlgoHandle, Handle, WindowsString};
+use crate::helpers::{AlgoHandle, Handle, WideCString};
 use crate::key::KeyHandle;
 use crate::property::{self, BlockLength, KeyLength, KeyLengths, ObjectLength};
 use crate::{Error, Result};
@@ -167,7 +167,7 @@ impl SymmetricAlgorithm {
     pub fn open(id: SymmetricAlgorithmId, chaining_mode: ChainingMode) -> Result<Self> {
         let handle = AlgoHandle::open(id.to_str())?;
 
-        let value = WindowsString::from_str(chaining_mode.to_str());
+        let value = WideCString::from_str(chaining_mode.to_str());
         handle.set_property::<property::ChainingMode>(value.as_slice_with_nul())?;
 
         Ok(Self {
