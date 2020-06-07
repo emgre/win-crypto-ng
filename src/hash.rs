@@ -45,7 +45,7 @@
 //! [`finish`]: struct.Hash.html#method.finish
 
 use crate::buffer::Buffer;
-use crate::helpers::{AlgoHandle, Handle, WindowsString};
+use crate::helpers::{AlgoHandle, Handle, WideCString};
 use crate::property::{AlgorithmName, HashLength, ObjectLength};
 use crate::{Error, Result};
 use std::convert::TryFrom;
@@ -308,7 +308,7 @@ impl Hash {
     pub fn hash_algorithm(&self) -> Result<HashAlgorithmId> {
         self.handle
             .get_property_unsized::<AlgorithmName>()
-            .map(|name| WindowsString::from_bytes_with_nul(name).to_string())
+            .map(|name| WideCString::from_bytes_with_nul(name).to_string())
             .map(|name| {
                 HashAlgorithmId::try_from(name.as_str())
                     .expect("Windows CNG API to return a correct algorithm name")

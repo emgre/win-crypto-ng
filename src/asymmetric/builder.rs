@@ -1,6 +1,6 @@
 //! Type-safe builders to generate various asymmetric keys.
 
-use crate::helpers::{Blob, Handle, WindowsString};
+use crate::helpers::{Blob, Handle, WideCString};
 use crate::key::ErasedKeyBlob;
 use crate::key::{BlobType, KeyHandle};
 use crate::{Error, Result};
@@ -191,7 +191,7 @@ pub enum BuilderOptions {
 }
 
 fn set_property(handle: BCRYPT_HANDLE, property: &str, value: &[u8]) -> Result<()> {
-    let property = WindowsString::from_str(property);
+    let property = WideCString::from_str(property);
     unsafe {
         Error::check(BCryptSetProperty(
             handle,
@@ -461,7 +461,7 @@ impl KeyPair {
         no_validate_public: bool,
     ) -> Result<Self> {
         let blob_type = key_data.blob_type().ok_or(Error::InvalidParameter)?;
-        let property = WindowsString::from_str(blob_type.as_value());
+        let property = WideCString::from_str(blob_type.as_value());
 
         let mut handle = KeyHandle::default();
         Error::check(unsafe {
@@ -483,7 +483,7 @@ impl KeyPair {
     }
 
     pub fn export(handle: BCRYPT_KEY_HANDLE, kind: BlobType) -> Result<Box<Blob<ErasedKeyBlob>>> {
-        let property = WindowsString::from_str(kind.as_value());
+        let property = WideCString::from_str(kind.as_value());
 
         let mut bytes: ULONG = 0;
         unsafe {

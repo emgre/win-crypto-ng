@@ -1,8 +1,6 @@
 use crate::property::Property;
 use crate::{Error, Result};
-use std::ffi::{OsStr, OsString};
 use std::mem::MaybeUninit;
-use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, VOID};
@@ -11,13 +9,15 @@ pub mod bytes;
 pub use bytes::{AsBytes, FromBytes};
 pub mod blob;
 pub use blob::{Blob, BlobLayout};
+pub mod string;
+pub use string::WideCString;
 
 pub trait Handle {
     fn as_ptr(&self) -> BCRYPT_HANDLE;
     fn as_mut_ptr(&mut self) -> *mut BCRYPT_HANDLE;
 
     fn set_property<T: Property>(&self, value: &T::Value) -> Result<()> {
-        let property = WindowsString::from_str(T::IDENTIFIER);
+        let property = WideCString::from_str(T::IDENTIFIER);
         unsafe {
             Error::check(BCryptSetProperty(
                 self.as_ptr(),
@@ -30,7 +30,7 @@ pub trait Handle {
     }
 
     fn set_property_dyn(&self, property: &str, value: &[u8]) -> Result<()> {
-        let property = WindowsString::from_str(property);
+        let property = WideCString::from_str(property);
         unsafe {
             Error::check(BCryptSetProperty(
                 self.as_ptr(),
@@ -46,7 +46,7 @@ pub trait Handle {
     where
         T::Value: Sized,
     {
-        let property = WindowsString::from_str(T::IDENTIFIER);
+        let property = WideCString::from_str(T::IDENTIFIER);
         // Determine how much data we need to allocate for the return value
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
 
@@ -71,7 +71,7 @@ pub trait Handle {
     }
 
     fn get_property_unsized<T: Property>(&self) -> Result<Box<T::Value>> {
-        let property = WindowsString::from_str(T::IDENTIFIER);
+        let property = WideCString::from_str(T::IDENTIFIER);
 
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
         let mut result = vec![0u8; size as usize].into_boxed_slice();
@@ -107,7 +107,7 @@ impl AlgoHandle {
     pub fn open(id: &str) -> Result<Self> {
         let mut handle = null_mut::<VOID>();
         unsafe {
-            let id_str = WindowsString::from_str(id);
+            let id_str = WideCString::from_str(id);
             Error::check(BCryptOpenAlgorithmProvider(
                 &mut handle,
                 id_str.as_ptr(),
@@ -139,51 +139,6 @@ impl Handle for AlgoHandle {
     }
 }
 
-pub struct WindowsString {
-    inner: Vec<u16>,
-}
-
-#[allow(dead_code)]
-impl WindowsString {
-    pub fn from_str(value: &str) -> Self {
-        Self {
-            inner: OsStr::new(value)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect(),
-        }
-    }
-
-    pub fn from_bytes_with_nul(val: Box<[u16]>) -> Self {
-        if let Some(last) = val.iter().last() {
-            assert_eq!(last, &0u16);
-        }
-
-        Self {
-            inner: val.into_vec(),
-        }
-    }
-
-    pub fn as_slice_with_nul(&self) -> &[u16] {
-        self.inner.as_slice()
-    }
-
-    pub fn as_ptr(&self) -> LPCWSTR {
-        self.inner.as_ptr()
-    }
-}
-
-impl ToString for WindowsString {
-    fn to_string(&self) -> String {
-        let without_nul = &self.inner[..self.inner.len().saturating_sub(1)];
-
-        OsString::from_wide(without_nul)
-            .to_string_lossy()
-            .as_ref()
-            .to_string()
-    }
-}
-
 /*pub fn list_algorithms() {
     let mut alg_count = MaybeUninit::<ULONG>::uninit();
     let mut alg_list = MaybeUninit::<*mut BCRYPT_ALGORITHM_IDENTIFIER>::uninit();
@@ -196,7 +151,7 @@ impl ToString for WindowsString {
         );
 
         for i in 0..alg_count.assume_init() {
-            let name = WindowsString::from_ptr((*alg_list.assume_init().offset(i as isize)).pszName);
+            let name = WideCString::from_ptr((*alg_list.assume_init().offset(i as isize)).pszName);
             println!("{}", name.to_str());
         }
     }
