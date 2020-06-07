@@ -29,19 +29,6 @@ pub trait Handle {
         }
     }
 
-    fn set_property_dyn(&self, property: &str, value: &[u8]) -> Result<()> {
-        let property = WideCString::from_str(property);
-        unsafe {
-            Error::check(BCryptSetProperty(
-                self.as_ptr(),
-                property.as_ptr(),
-                value as *const _ as PUCHAR,
-                value.len() as ULONG,
-                0,
-            ))
-        }
-    }
-
     fn get_property<T: Property>(&self) -> Result<T::Value>
     where
         T::Value: Sized,
