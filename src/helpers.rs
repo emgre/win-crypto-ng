@@ -9,8 +9,8 @@ use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, VOID};
 
 pub mod bytes;
 pub use bytes::{AsBytes, FromBytes};
-pub mod dyn_struct;
-pub use dyn_struct::DynStruct;
+pub mod blob;
+pub use blob::{Blob, BlobLayout};
 
 pub trait Handle {
     fn as_ptr(&self) -> BCRYPT_HANDLE;

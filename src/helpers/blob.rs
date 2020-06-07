@@ -14,19 +14,19 @@ use crate::helpers::bytes::{AsBytes, FromBytes};
 /// no unaligned load should happen once the value is constructed from
 /// heap-allocated bytes.
 #[repr(C, packed)]
-pub struct DynStruct<T: DynStructParts>(T::Header, [u8]);
+pub struct Blob<T: BlobLayout>(T::Header, [u8]);
 
 /// Marker trait for dynamic struct layouts prefixed with `Self::Header` type
-/// of a statically-known size. Used in tandem with `DynStruct`.
-pub trait DynStructParts {
+/// of a statically-known size. Used in tandem with `Blob`.
+pub trait BlobLayout {
     type Header: AsBytes + FromBytes;
 }
 
-impl<'a, T: DynStructParts> DynStruct<T> {
+impl<'a, T: BlobLayout> Blob<T> {
     pub fn header(&self) -> &T::Header {
-        // SAFETY: The only way to construct `DynStruct` is via
+        // SAFETY: The only way to construct `Blob` is via
         // `Self::from_boxed`, which requires that the source reference is
-        // aligned at least as `T::Header` and since `DynStruct` is
+        // aligned at least as `T::Header` and since `Blob` is
         // `#[repr(C)]` (and so is `T::Header`, because it  implements `AsBytes`
         // which requires which requires being `#[repr(C)]`), so the reference
         // to its first field will be aligned at least as `T::Header`.
@@ -49,7 +49,7 @@ impl<'a, T: DynStructParts> DynStruct<T> {
         FromBytes::from_boxed(boxed)
     }
 
-    pub(crate) unsafe fn ref_cast<U: DynStructParts>(&self) -> &DynStruct<U> {
+    pub(crate) unsafe fn ref_cast<U: BlobLayout>(&self) -> &Blob<U> {
         let len = std::mem::size_of_val(self);
         // Adjust the length component
         let tail_len = len - std::mem::size_of::<U::Header>();
@@ -57,18 +57,18 @@ impl<'a, T: DynStructParts> DynStruct<T> {
         let ptr = self as *const _;
         let slice = std::slice::from_raw_parts(ptr as *const U::Header, tail_len);
 
-        &*(slice as *const _ as *const DynStruct<U>)
+        &*(slice as *const _ as *const Blob<U>)
     }
 }
 
 // SAFETY: The entire struct is `#[repr(C)]` and so is the header (because it
 // implements `AsBytes` as well)
-unsafe impl<T: DynStructParts> AsBytes for DynStruct<T> {}
+unsafe impl<T: BlobLayout> AsBytes for Blob<T> {}
 
-unsafe impl<T: DynStructParts> FromBytes for DynStruct<T> {
+unsafe impl<T: BlobLayout> FromBytes for Blob<T> {
     // Require that the allocation is at least as aligned as its header to
     // safely reference it as the first field. (despite
-    // `DynStruct` being technically `#[repr(packed)]`)
+    // `Blob` being technically `#[repr(packed)]`)
     const MIN_LAYOUT: std::alloc::Layout = std::alloc::Layout::new::<T::Header>();
 
     unsafe fn ptr_cast(source: *const [u8]) -> *const Self {
@@ -89,7 +89,7 @@ unsafe impl<T: DynStructParts> FromBytes for DynStruct<T> {
 /// layout.
 /// Assumes a contiguous byte buffer.
 #[macro_export]
-macro_rules! dyn_struct {
+macro_rules! blob {
     (
         $(#[$wrapper_meta:meta])*
         enum $wrapper_ident: ident {},
@@ -113,17 +113,17 @@ macro_rules! dyn_struct {
             )*
         }
 
-        impl<'a> $crate::helpers::dyn_struct::DynStructParts for $wrapper_ident {
+        impl<'a> $crate::helpers::blob::BlobLayout for $wrapper_ident {
             type Header = $header;
         }
 
-        impl $crate::helpers::dyn_struct::DynStruct<$wrapper_ident> {
+        impl $crate::helpers::blob::Blob<$wrapper_ident> {
             #[allow(unused_assignments)]
             pub fn clone_from_parts(header: &$header, tail: &$tail_ident) -> Box<Self> {
                 let header_len = std::mem::size_of_val(header);
-                let tail_len: usize = 0 $( + dyn_struct! { size: header, $($len)*} )*;
+                let tail_len: usize = 0 $( + blob! { size: header, $($len)*} )*;
 
-                // To err on the safe side, despite `DynStruct` being
+                // To err on the safe side, despite `Blob` being
                 // `#[repr(packed)]`, we pad the tail allocation as if it was
                 // a regular, padded struct.
                 // We assume that header is #[repr(C)] and that its alignment is
@@ -142,7 +142,7 @@ macro_rules! dyn_struct {
                 &mut boxed[..header_len].copy_from_slice(header_as_bytes);
                 let mut offset = header_len;
                 $(
-                    let field_len = dyn_struct! { size: header, $($len)*};
+                    let field_len = blob! { size: header, $($len)*};
                     dbg!(tail.$field, field_len);
                     &mut boxed[offset..offset + field_len].copy_from_slice(tail.$field);
                     offset += field_len;
@@ -152,8 +152,8 @@ macro_rules! dyn_struct {
             }
         }
 
-        impl $crate::helpers::dyn_struct::DynStruct<$wrapper_ident> {
-            dyn_struct! { fields: ;
+        impl $crate::helpers::blob::Blob<$wrapper_ident> {
+            blob! { fields: ;
                 $(
                     $(#[$meta])*
                     $field [$($len)*],
@@ -177,7 +177,7 @@ macro_rules! dyn_struct {
         $(#[$curr_meta])*
         #[inline(always)]
         pub fn $curr(&self) -> &[u8] {
-            let size: usize = dyn_struct! { size: self.header(), $($curr_len)* };
+            let size: usize = blob! { size: self.header(), $($curr_len)* };
             let offset = 0 $(+ self.$prev().len())*;
 
             &self.tail()[offset..offset + size]
@@ -185,7 +185,7 @@ macro_rules! dyn_struct {
 
         // Once expanded, push the processed ident and recursively expand other
         // fields
-        dyn_struct! {
+        blob! {
             fields: $($prev,)* $curr, ;
             $(
                 $(#[$field_meta])*
@@ -215,7 +215,7 @@ mod tests {
         pub struct Header {
             count: u16,
         }
-        dyn_struct! {
+        blob! {
             enum MyDynStruct {},
             header: Header,
             view: struct ref TailView {
@@ -225,7 +225,7 @@ mod tests {
 
         unsafe impl Pod for Header {}
 
-        let inline = DynStruct::<MyDynStruct>::clone_from_parts(
+        let inline = Blob::<MyDynStruct>::clone_from_parts(
             &Header { count: 4 },
             &TailView {
                 some_member: &[1u8, 2, 3, 4],
@@ -233,7 +233,7 @@ mod tests {
         );
         assert_eq!(6, std::mem::size_of_val(&*inline));
 
-        let inline = DynStruct::<MyDynStruct>::clone_from_parts(
+        let inline = Blob::<MyDynStruct>::clone_from_parts(
             &Header { count: 5 },
             &TailView {
                 some_member: &[1u8, 2, 3, 4, 5],
