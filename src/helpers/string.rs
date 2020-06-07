@@ -1,3 +1,8 @@
+//! Owned Unicode, nul-aware and nul-terminated wide string.
+//!
+//! Provides a lossless conversion for FFI APIs expecting an Unicode
+//! nul-terminated string.
+
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 

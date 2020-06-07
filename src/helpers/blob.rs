@@ -6,9 +6,9 @@ use crate::helpers::bytes::{AsBytes, FromBytes};
 /// but with trailing data of size dependent on the header field values.
 ///
 /// # Layout
-/// The structure is marked as #[repr(packed)] to be layout-compatible with
-/// regular byte slice ([u8]) since it's mostly constructed from Box<[u8]> via
-/// C FFI.
+/// The structure is marked as `#[repr(packed)]` to be layout-compatible with
+/// regular byte slice (`[u8]`) since it's mostly constructed from `Box<[u8]>`
+/// via C FFI.
 ///
 /// It's worth noting that heap allocation will often align to pointer size, so
 /// no unaligned load should happen once the value is constructed from

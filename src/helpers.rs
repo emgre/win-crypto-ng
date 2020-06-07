@@ -1,3 +1,5 @@
+//! Facilitating abstractions for FFI usage.
+
 pub mod bytes;
 pub use bytes::{AsBytes, FromBytes};
 pub mod blob;
