@@ -146,7 +146,7 @@ impl AsymmetricAlgorithm {
             AsymmetricAlgorithmId::Ecdh(curve) | AsymmetricAlgorithmId::Ecdsa(curve) => {
                 let property = WindowsString::from_str(curve.as_str());
 
-                handle.set_property::<EccCurveName>(property.as_slice())?;
+                handle.set_property::<EccCurveName>(property.as_slice_with_nul())?;
             }
             _ => {}
         }
@@ -162,10 +162,12 @@ impl AsymmetricAlgorithm {
     /// assert_eq!(algo.id(), Ok(AsymmetricAlgorithmId::Rsa));
     /// ```
     pub fn id(&self) -> Result<AsymmetricAlgorithmId> {
-        let name = self.handle.get_property_unsized::<AlgorithmName>()?;
-        let name = WindowsString::from_ptr(name.as_ref().as_ptr());
+        let name = self
+            .handle
+            .get_property_unsized::<AlgorithmName>()
+            .map(|name| WindowsString::from_bytes_with_nul(name).to_string())?;
 
-        AsymmetricAlgorithmId::try_from(&*name.to_string()).map_err(|_| crate::Error::InvalidHandle)
+        AsymmetricAlgorithmId::try_from(name.as_str()).map_err(|_| crate::Error::InvalidHandle)
     }
 }
 

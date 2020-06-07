@@ -168,7 +168,7 @@ impl SymmetricAlgorithm {
         let handle = AlgoHandle::open(id.to_str())?;
 
         let value = WindowsString::from_str(chaining_mode.to_str());
-        handle.set_property::<property::ChainingMode>(value.as_slice())?;
+        handle.set_property::<property::ChainingMode>(value.as_slice_with_nul())?;
 
         Ok(Self {
             handle,

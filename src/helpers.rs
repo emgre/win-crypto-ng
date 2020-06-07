@@ -154,16 +154,17 @@ impl WindowsString {
         }
     }
 
-    pub fn from_ptr(ptr: *const u16) -> Self {
-        unsafe {
-            let len = (0..).take_while(|&i| *ptr.offset(i) != 0).count();
-            Self {
-                inner: std::slice::from_raw_parts(ptr, len).to_vec(),
-            }
+    pub fn from_bytes_with_nul(val: Box<[u16]>) -> Self {
+        if let Some(last) = val.iter().last() {
+            assert_eq!(last, &0u16);
+        }
+
+        Self {
+            inner: val.into_vec(),
         }
     }
 
-    pub fn as_slice(&self) -> &[u16] {
+    pub fn as_slice_with_nul(&self) -> &[u16] {
         self.inner.as_slice()
     }
 
@@ -174,7 +175,9 @@ impl WindowsString {
 
 impl ToString for WindowsString {
     fn to_string(&self) -> String {
-        OsString::from_wide(&self.inner)
+        let without_nul = &self.inner[..self.inner.len().saturating_sub(1)];
+
+        OsString::from_wide(without_nul)
             .to_string_lossy()
             .as_ref()
             .to_string()
