@@ -206,7 +206,6 @@ impl SymmetricAlgorithm {
     /// ```
     pub fn valid_key_sizes(&self) -> Result<Vec<usize>> {
         let key_sizes = self.handle.get_property::<KeyLengths>()?;
-        let key_sizes = key_sizes.as_ref();
 
         if key_sizes.dwIncrement != 0 {
             Ok(
@@ -227,7 +226,7 @@ impl SymmetricAlgorithm {
     ///
     /// [`valid_key_sizes`]: #method.valid_key_sizes
     pub fn new_key(&self, secret: &[u8]) -> Result<SymmetricAlgorithmKey> {
-        let object_size = self.handle.get_property::<ObjectLength>()?.copied();
+        let object_size = self.handle.get_property::<ObjectLength>()?;
 
         let mut key_handle = KeyHandle::new();
         let mut object = Buffer::new(object_size as usize);
@@ -271,7 +270,7 @@ impl SymmetricAlgorithmKey {
     pub fn key_size(&self) -> Result<usize> {
         self.handle
             .get_property::<KeyLength>()
-            .map(|key_size| key_size.copied() as usize)
+            .map(|key_size| key_size as usize)
     }
 
     /// Returns the block size in bytes.
@@ -291,7 +290,7 @@ impl SymmetricAlgorithmKey {
     pub fn block_size(&self) -> Result<usize> {
         self.handle
             .get_property::<BlockLength>()
-            .map(|block_size| block_size.copied() as usize)
+            .map(|block_size| block_size as usize)
     }
 
     /// Encrypts data using the symmetric key

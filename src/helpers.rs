@@ -42,7 +42,7 @@ pub trait Handle {
         }
     }
 
-    fn get_property<T: Property>(&self) -> Result<MaybeUnsized<T::Value>>
+    fn get_property<T: Property>(&self) -> Result<T::Value>
     where
         T::Value: Sized,
     {
@@ -52,39 +52,22 @@ pub trait Handle {
 
         // We are not expected to allocate extra trailing data, so construct the
         // value and return it inline (especially important for `Copy` types)
-        Ok(if size as usize == std::mem::size_of::<T::Value>() {
-            let mut result = MaybeUninit::<T::Value>::uninit();
+        let mut result = MaybeUninit::<T::Value>::uninit();
 
-            unsafe {
-                Error::check(BCryptGetProperty(
-                    self.as_ptr(),
-                    property.as_ptr(),
-                    result.as_mut_ptr() as *mut _,
-                    size,
-                    &mut size,
-                    0,
-                ))?;
-            }
+        unsafe {
+            Error::check(BCryptGetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                result.as_mut_ptr() as *mut _,
+                size,
+                &mut size,
+                0,
+            ))?;
+        }
 
-            MaybeUnsized::Inline(unsafe { result.assume_init() })
-        } else {
-            let mut result = vec![0u8; size as usize].into_boxed_slice();
-            unsafe {
-                Error::check(BCryptGetProperty(
-                    self.as_ptr(),
-                    property.as_ptr(),
-                    result.as_mut_ptr(),
-                    size,
-                    &mut size,
-                    0,
-                ))?;
-            }
-            // Assert that we actually wrote as many bytes as we were asked to
-            // allocate
-            assert_eq!(result.len(), size as usize);
+        assert_eq!(size as usize, std::mem::size_of::<T::Value>());
 
-            MaybeUnsized::Unsized(FromBytes::from_boxed(result))
-        })
+        Ok(unsafe { result.assume_init() })
     }
 
     fn get_property_unsized<T: Property>(&self) -> Result<Box<T::Value>> {
@@ -215,26 +198,3 @@ impl ToString for WindowsString {
         }
     }
 }*/
-
-/// Helper struct that contains the data either inline or in a heap allocation.
-/// Allows to skip allocation for sufficiently small data or when the size is
-/// static.
-pub enum MaybeUnsized<T> {
-    Inline(T),
-    Unsized(Box<T>),
-}
-
-impl<T: Copy> MaybeUnsized<T> {
-    pub fn copied(&self) -> T {
-        *self.as_ref()
-    }
-}
-
-impl<T> AsRef<T> for MaybeUnsized<T> {
-    fn as_ref(&self) -> &T {
-        match self {
-            Self::Inline(value) => &value,
-            Self::Unsized(blob) => &blob,
-        }
-    }
-}
