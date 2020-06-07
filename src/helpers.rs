@@ -34,8 +34,7 @@ pub trait Handle {
         T::Value: Sized,
     {
         let property = WideCString::from(T::IDENTIFIER);
-        // Determine how much data we need to allocate for the return value
-        let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
+        let mut size = std::mem::size_of::<T::Value>() as u32;
 
         // We are not expected to allocate extra trailing data, so construct the
         // value and return it inline (especially important for `Copy` types)
@@ -51,7 +50,8 @@ pub trait Handle {
                 0,
             ))?;
         }
-
+        // SAFETY: Verify that the API call has written the exact amount of
+        // bytes, so that we can conclude it's been entirely initialized
         assert_eq!(size as usize, std::mem::size_of::<T::Value>());
 
         Ok(unsafe { result.assume_init() })
@@ -73,6 +73,9 @@ pub trait Handle {
                 0,
             ))?;
         }
+        // SAFETY: Verify that the API call has written the exact amount of
+        // bytes, so that we can conclude it's been entirely initialized
+        assert_eq!(size as usize, result.len());
 
         Ok(FromBytes::from_boxed(result))
     }
