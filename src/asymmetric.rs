@@ -7,8 +7,8 @@
 //!
 //! > **NOTE**: This is currently a stub and should be expanded.
 
-use crate::helpers::dyn_struct::DynStruct;
-use crate::helpers::dyn_struct::DynStructParts;
+use crate::helpers::blob::Blob;
+use crate::helpers::blob::BlobLayout;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
 use crate::key::ErasedKeyBlob;
 use crate::key::{BlobType, KeyHandle};
@@ -269,7 +269,7 @@ impl AsymmetricKey<Rsa, Private> {
     /// assert_eq!(pub_exp, private.pub_exp());
     /// assert_eq!(modulus, private.modulus());
     /// ```
-    pub fn export_full(&self) -> Result<Box<DynStruct<RsaKeyFullPrivateBlob>>> {
+    pub fn export_full(&self) -> Result<Box<Blob<RsaKeyFullPrivateBlob>>> {
         Ok(KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
             .try_into()
             .map_err(|_| crate::Error::BadData)?)
@@ -277,7 +277,7 @@ impl AsymmetricKey<Rsa, Private> {
 }
 
 pub trait Import<'a, A: Algorithm, P: Parts> {
-    type Blob: AsRef<DynStruct<ErasedKeyBlob>> + 'a;
+    type Blob: AsRef<Blob<ErasedKeyBlob>> + 'a;
     fn import(
         algo: A,
         provider: &AsymmetricAlgorithm,
@@ -303,28 +303,28 @@ macro_rules! import_blobs {
 }
 
 import_blobs!(
-    (AsymmetricAlgorithmId, Public, &'a DynStruct<ErasedKeyBlob>),
-    (AsymmetricAlgorithmId, Private, &'a DynStruct<ErasedKeyBlob>),
-    (Dh, Public, &'a DynStruct<DhKeyPublicBlob>),
-    (Dh, Private, &'a DynStruct<DhKeyPrivateBlob>),
+    (AsymmetricAlgorithmId, Public, &'a Blob<ErasedKeyBlob>),
+    (AsymmetricAlgorithmId, Private, &'a Blob<ErasedKeyBlob>),
+    (Dh, Public, &'a Blob<DhKeyPublicBlob>),
+    (Dh, Private, &'a Blob<DhKeyPrivateBlob>),
     (Dsa, Public, DsaPublicBlob),
     (Dsa, Private, DsaPrivateBlob),
-    (Ecdh<NistP256>, Public, &'a DynStruct<EccKeyPublicBlob>),
-    (Ecdh<NistP256>, Private, &'a DynStruct<EccKeyPrivateBlob>),
-    (Ecdh<NistP384>, Public, &'a DynStruct<EccKeyPublicBlob>),
-    (Ecdh<NistP384>, Private, &'a DynStruct<EccKeyPrivateBlob>),
-    (Ecdh<NistP521>, Public, &'a DynStruct<EccKeyPublicBlob>),
-    (Ecdh<NistP521>, Private, &'a DynStruct<EccKeyPrivateBlob>),
-    (Ecdh<Curve25519>, Public, &'a DynStruct<EccKeyPublicBlob>),
-    (Ecdh<Curve25519>, Private, &'a DynStruct<EccKeyPrivateBlob>),
-    (Ecdsa<NistP256>, Public, &'a DynStruct<EccKeyPublicBlob>),
-    (Ecdsa<NistP256>, Private, &'a DynStruct<EccKeyPrivateBlob>),
-    (Ecdsa<NistP384>, Public, &'a DynStruct<EccKeyPublicBlob>),
-    (Ecdsa<NistP384>, Private, &'a DynStruct<EccKeyPrivateBlob>),
-    (Ecdsa<NistP521>, Public, &'a DynStruct<EccKeyPublicBlob>),
-    (Ecdsa<NistP521>, Private, &'a DynStruct<EccKeyPrivateBlob>),
-    (Rsa, Public, &'a DynStruct<RsaKeyPublicBlob>),
-    (Rsa, Private, &'a DynStruct<RsaKeyPrivateBlob>),
+    (Ecdh<NistP256>, Public, &'a Blob<EccKeyPublicBlob>),
+    (Ecdh<NistP256>, Private, &'a Blob<EccKeyPrivateBlob>),
+    (Ecdh<NistP384>, Public, &'a Blob<EccKeyPublicBlob>),
+    (Ecdh<NistP384>, Private, &'a Blob<EccKeyPrivateBlob>),
+    (Ecdh<NistP521>, Public, &'a Blob<EccKeyPublicBlob>),
+    (Ecdh<NistP521>, Private, &'a Blob<EccKeyPrivateBlob>),
+    (Ecdh<Curve25519>, Public, &'a Blob<EccKeyPublicBlob>),
+    (Ecdh<Curve25519>, Private, &'a Blob<EccKeyPrivateBlob>),
+    (Ecdsa<NistP256>, Public, &'a Blob<EccKeyPublicBlob>),
+    (Ecdsa<NistP256>, Private, &'a Blob<EccKeyPrivateBlob>),
+    (Ecdsa<NistP384>, Public, &'a Blob<EccKeyPublicBlob>),
+    (Ecdsa<NistP384>, Private, &'a Blob<EccKeyPrivateBlob>),
+    (Ecdsa<NistP521>, Public, &'a Blob<EccKeyPublicBlob>),
+    (Ecdsa<NistP521>, Private, &'a Blob<EccKeyPrivateBlob>),
+    (Rsa, Public, &'a Blob<RsaKeyPublicBlob>),
+    (Rsa, Private, &'a Blob<RsaKeyPrivateBlob>),
 );
 
 /// Attempts to export the key to a given blob type.
@@ -348,12 +348,12 @@ import_blobs!(
 /// assert_eq!(modulus, private.modulus());
 /// ```
 pub trait Export<A: Algorithm, P: Parts>: Borrow<AsymmetricKey<A, P>> {
-    type Blob: KeyBlob + DynStructParts;
+    type Blob: KeyBlob + BlobLayout;
 
     #[doc(hidden)]
     fn blob_type(&self) -> BlobType;
 
-    fn export(&self) -> Result<Box<DynStruct<Self::Blob>>> {
+    fn export(&self) -> Result<Box<Blob<Self::Blob>>> {
         let key = self.borrow();
         let blob_type = self.blob_type();
 
@@ -480,12 +480,12 @@ export_blobs!(Rsa, Private, RsaKeyPrivateBlob, BlobType::RsaPrivate);
 use crate::key::*;
 
 pub enum DsaPublicBlob {
-    V1(Box<DynStruct<DsaKeyPublicBlob>>),
-    V2(Box<DynStruct<DsaKeyPublicV2Blob>>),
+    V1(Box<Blob<DsaKeyPublicBlob>>),
+    V2(Box<Blob<DsaKeyPublicV2Blob>>),
 }
 
-impl<'a> AsRef<DynStruct<ErasedKeyBlob>> for DsaPublicBlob {
-    fn as_ref(&self) -> &DynStruct<ErasedKeyBlob> {
+impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPublicBlob {
+    fn as_ref(&self) -> &Blob<ErasedKeyBlob> {
         match self {
             DsaPublicBlob::V1(v1) => v1.as_erased(),
             DsaPublicBlob::V2(v2) => v2.as_erased(),
@@ -494,12 +494,12 @@ impl<'a> AsRef<DynStruct<ErasedKeyBlob>> for DsaPublicBlob {
 }
 
 pub enum DsaPrivateBlob {
-    V1(Box<DynStruct<DsaKeyPrivateBlob>>),
-    V2(Box<DynStruct<DsaKeyPrivateV2Blob>>),
+    V1(Box<Blob<DsaKeyPrivateBlob>>),
+    V2(Box<Blob<DsaKeyPrivateV2Blob>>),
 }
 
-impl<'a> AsRef<DynStruct<ErasedKeyBlob>> for DsaPrivateBlob {
-    fn as_ref(&self) -> &DynStruct<ErasedKeyBlob> {
+impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPrivateBlob {
+    fn as_ref(&self) -> &Blob<ErasedKeyBlob> {
         match self {
             DsaPrivateBlob::V1(v1) => v1.as_erased(),
             DsaPrivateBlob::V2(v2) => v2.as_erased(),

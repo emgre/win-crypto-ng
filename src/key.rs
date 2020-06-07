@@ -1,7 +1,7 @@
 //! Cryptographic key handle
 
-use crate::dyn_struct;
-use crate::helpers::dyn_struct::{DynStruct, DynStructParts};
+use crate::blob;
+use crate::helpers::blob::{Blob, BlobLayout};
 use crate::helpers::Handle;
 use std::convert::TryFrom;
 use std::ptr::null_mut;
@@ -131,7 +131,7 @@ impl<'a> TryFrom<&'a str> for BlobType {
 
 /// Marker trait for values containing CNG key blob types.
 pub unsafe trait KeyBlob: Sized {
-    // TODO: Require : DynStructParts + Self::Header: AsRef<BCRYPT_KEY_BLOB>
+    // TODO: Require : BlobLayout + Self::Header: AsRef<BCRYPT_KEY_BLOB>
     // This can be used to cheaply get the magic and to get rid of `unsafe`
     // trait and make the as_erased call actually safe
     const VALID_MAGIC: &'static [ULONG];
@@ -142,18 +142,18 @@ pub unsafe trait KeyBlob: Sized {
     }
 }
 
-impl<T> AsRef<DynStruct<ErasedKeyBlob>> for DynStruct<T>
+impl<T> AsRef<Blob<ErasedKeyBlob>> for Blob<T>
 where
-    T: DynStructParts + KeyBlob,
+    T: BlobLayout + KeyBlob,
 {
-    fn as_ref(&self) -> &DynStruct<ErasedKeyBlob> {
+    fn as_ref(&self) -> &Blob<ErasedKeyBlob> {
         self.as_erased()
     }
 }
 
-impl<T> DynStruct<T>
+impl<T> Blob<T>
 where
-    T: DynStructParts + KeyBlob,
+    T: BlobLayout + KeyBlob,
 {
     pub fn magic(&self) -> ULONG {
         self.as_erased().header().Magic
@@ -163,18 +163,18 @@ where
         magic_to_blob_type(self.magic())
     }
 
-    pub fn as_erased(&self) -> &DynStruct<ErasedKeyBlob> {
+    pub fn as_erased(&self) -> &Blob<ErasedKeyBlob> {
         // SAFETY: The `KeyBlob` trait is only implemented for types that also
-        // implement DynStructParts and whose header extends the basic
-        // BCRYPT_KEY_BLOB, which DynStruct<ErasedKeyBlob> wraps
+        // implement BlobLayout and whose header extends the basic
+        // BCRYPT_KEY_BLOB, which Blob<ErasedKeyBlob> wraps
         unsafe { self.ref_cast() }
     }
 
     // NOTE: TryInto can't be implemented due to blanket generic TryFrom impl,
     // i.e. U = T provides a blanket Into<T> for T impl.
-    pub fn try_into<U>(self: Box<Self>) -> Result<Box<DynStruct<U>>, Box<Self>>
+    pub fn try_into<U>(self: Box<Self>) -> Result<Box<Blob<U>>, Box<Self>>
     where
-        U: DynStructParts + KeyBlob,
+        U: BlobLayout + KeyBlob,
     {
         if !U::is_magic_valid(self.magic()) {
             return Err(self);
@@ -192,7 +192,7 @@ where
         // 2. The lifetime of both references is the same
         unsafe {
             let slice = std::slice::from_raw_parts_mut(ptr as *mut (), tail_len);
-            Ok(Box::from_raw(slice as *mut [()] as *mut DynStruct<U>))
+            Ok(Box::from_raw(slice as *mut [()] as *mut Blob<U>))
         }
     }
 }
@@ -242,7 +242,7 @@ key_blobs! {
     RsaKeyFullPrivateBlob, BlobType::RsaFullPrivate, magic: [BCRYPT_RSAFULLPRIVATE_MAGIC]
 }
 
-dyn_struct! {
+blob! {
     enum ErasedKeyBlob {},
     header: BCRYPT_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -252,7 +252,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum RsaKeyPublicBlob {},
     header: BCRYPT_RSAKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -263,7 +263,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     #[derive(Debug)]
     enum RsaKeyPrivateBlob {},
     header: BCRYPT_RSAKEY_BLOB,
@@ -278,7 +278,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum RsaKeyFullPrivateBlob {},
     header: BCRYPT_RSAKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -295,7 +295,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum DhKeyPublicBlob {},
     header: BCRYPT_DH_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -307,7 +307,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum DhKeyPrivateBlob {},
     header: BCRYPT_DH_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -320,7 +320,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum DsaKeyPublicBlob {},
     header: BCRYPT_DSA_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -332,7 +332,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum DsaKeyPrivateBlob {},
     header: BCRYPT_DSA_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -345,7 +345,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum DsaKeyPublicV2Blob {},
     header: BCRYPT_DSA_KEY_BLOB_V2,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -357,7 +357,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum DsaKeyPrivateV2Blob {},
     header: BCRYPT_DSA_KEY_BLOB_V2,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -370,7 +370,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum EccKeyPublicBlob {},
     header: BCRYPT_ECCKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
@@ -381,7 +381,7 @@ dyn_struct! {
     }
 }
 
-dyn_struct! {
+blob! {
     enum EccKeyPrivateBlob {},
     header: BCRYPT_ECCKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
