@@ -100,7 +100,7 @@ pub enum HashAlgorithmId {
 }
 
 impl HashAlgorithmId {
-    fn to_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Sha1 => BCRYPT_SHA1_ALGORITHM,
             Self::Sha256 => BCRYPT_SHA256_ALGORITHM,
@@ -149,7 +149,7 @@ impl HashAlgorithm {
     /// assert!(algo.is_ok());
     /// ```
     pub fn open(id: HashAlgorithmId) -> Result<Self> {
-        let handle = AlgoHandle::open(id.to_str())?;
+        let handle = AlgoHandle::open(id.as_str())?;
 
         Ok(Self { handle })
     }
