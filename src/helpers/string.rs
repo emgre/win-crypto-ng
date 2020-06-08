@@ -42,6 +42,10 @@ impl fmt::Display for FromBytesWithNulError {
 impl std::error::Error for FromBytesWithNulError {}
 
 impl WideCString {
+    pub fn new() -> Self {
+        WideCString { inner: Vec::new() }
+    }
+
     pub fn from_bytes_with_nul(val: Box<[u16]>) -> Result<Self, FromBytesWithNulError> {
         match val.iter().position(|&x| x == NUL) {
             None => Err(FromBytesWithNulError::NotTerminated),
@@ -56,6 +60,12 @@ impl WideCString {
 
     pub fn as_ptr(&self) -> LPCWSTR {
         self.inner.as_ptr()
+    }
+}
+
+impl Default for WideCString {
+    fn default() -> Self {
+        WideCString { inner: Vec::new() }
     }
 }
 
