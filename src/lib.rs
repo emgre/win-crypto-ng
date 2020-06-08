@@ -36,6 +36,7 @@ doctest!("../README.md");
 pub enum Error {
     NotFound,
     InvalidParameter,
+    InvalidSignature,
     NoMemory,
     BufferTooSmall,
     InvalidHandle,
@@ -63,12 +64,15 @@ impl Error {
             ntstatus::STATUS_SUCCESS => Ok(()),
             ntstatus::STATUS_NOT_FOUND => Err(Error::NotFound),
             ntstatus::STATUS_INVALID_PARAMETER => Err(Error::InvalidParameter),
-            ntstatus::STATUS_NO_MEMORY => Err(Error::NoMemory),
             ntstatus::STATUS_BUFFER_TOO_SMALL => Err(Error::BufferTooSmall),
             ntstatus::STATUS_INVALID_HANDLE => Err(Error::InvalidHandle),
+            ntstatus::STATUS_INVALID_SIGNATURE => Err(Error::InvalidSignature),
             ntstatus::STATUS_NOT_SUPPORTED => Err(Error::NotSupported),
             ntstatus::STATUS_AUTH_TAG_MISMATCH => Err(Error::AuthTagMismatch),
             ntstatus::STATUS_INVALID_BUFFER_SIZE => Err(Error::InvalidBufferSize),
+            ntstatus::STATUS_NO_MEMORY | winapi::shared::winerror::NTE_NO_MEMORY => {
+                Err(Error::NoMemory)
+            }
             winapi::shared::winerror::NTE_BAD_DATA => Err(Error::BadData),
             ntstatus::STATUS_UNSUCCESSFUL => Err(Error::Unsuccessful),
             value => Err(Error::Unknown(value)),
