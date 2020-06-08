@@ -43,6 +43,10 @@ impl fmt::Display for FromBytesWithNulError {
 impl std::error::Error for FromBytesWithNulError {}
 
 impl WindowsString {
+    pub(crate) fn new() -> Self {
+        WindowsString { inner: Vec::new() }
+    }
+
     pub fn from_bytes_with_nul(val: Cow<'_, [u16]>) -> Result<Self, FromBytesWithNulError> {
         match val.iter().position(|&x| x == NUL) {
             Some(idx) if idx == val.len() - 1 => Ok(Self {
