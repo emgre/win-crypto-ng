@@ -170,7 +170,7 @@ impl AsymmetricAlgorithm {
     }
 }
 
-pub struct Ecdsa<C: Curve>(C);
+pub struct Ecdsa<C: Curve>(pub C);
 impl<C: Curve> Algorithm for Ecdsa<C> {
     #[inline(always)]
     fn id(&self) -> AsymmetricAlgorithmId {
@@ -178,7 +178,7 @@ impl<C: Curve> Algorithm for Ecdsa<C> {
     }
 }
 
-pub struct Ecdh<C: Curve>(C);
+pub struct Ecdh<C: Curve>(pub C);
 impl<C: Curve> Algorithm for Ecdh<C> {
     #[inline(always)]
     fn id(&self) -> AsymmetricAlgorithmId {
