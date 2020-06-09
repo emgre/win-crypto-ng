@@ -282,10 +282,6 @@ pub trait Import<'a, A: Algorithm, P: Parts> {
         provider: &AsymmetricAlgorithm,
         blob: Self::Blob,
     ) -> Result<AsymmetricKey<A, P>> {
-        if provider.id()? != algo.id() {
-            return Err(crate::Error::InvalidParameter);
-        };
-
         KeyPair::import(provider, blob.as_ref(), true)
             .map(|pair| AsymmetricKey::<A, P>::from((pair.0, algo)))
     }
