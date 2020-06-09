@@ -3,12 +3,47 @@
 //! A scheme to verify the authenticity of digital messages or documents using
 //! asymmetric cryptography.
 
+use crate::asymmetric::ecc::{NistP256, NistP384, NistP521};
+use crate::asymmetric::{AsymmetricKey, Ecdsa, Private, Rsa};
 use crate::handle::{Handle, KeyHandle};
 use crate::hash::HashAlgorithmId;
 use crate::helpers::WideCString;
 use crate::{Error, Result};
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
+
+pub trait Signer {
+    fn sign(&self, input: &[u8], padding: Option<SignaturePadding>) -> Result<Box<[u8]>>;
+    fn verify(
+        &self,
+        hash: &[u8],
+        signature: &[u8],
+        padding: Option<SignaturePadding>,
+    ) -> Result<()>;
+}
+
+macro_rules! impl_signer_for_key {
+    ($type: ty) => {
+        impl Signer for $type {
+            fn sign(&self, input: &[u8], padding: Option<SignaturePadding>) -> Result<Box<[u8]>> {
+                sign_hash(&self.0, padding, input)
+            }
+            fn verify(
+                &self,
+                hash: &[u8],
+                signature: &[u8],
+                padding: Option<SignaturePadding>,
+            ) -> Result<()> {
+                verify_signature(&self.0, padding, hash, signature)
+            }
+        }
+    };
+}
+
+impl_signer_for_key!(AsymmetricKey<Rsa,Private>);
+impl_signer_for_key!(AsymmetricKey<Ecdsa<NistP256>, Private>);
+impl_signer_for_key!(AsymmetricKey<Ecdsa<NistP384>, Private>);
+impl_signer_for_key!(AsymmetricKey<Ecdsa<NistP521>, Private>);
 
 /// Padding scheme to be used when creating/verifying a hash signature.
 #[derive(Clone, Copy)]
@@ -85,15 +120,25 @@ impl SignaturePadding {
     }
 }
 
-pub fn sign_hash(key: &KeyHandle, padding: SignaturePadding, input: &[u8]) -> Result<Box<[u8]>> {
+pub fn sign_hash(
+    key: &KeyHandle,
+    padding: Option<SignaturePadding>,
+    input: &[u8],
+) -> Result<Box<[u8]>> {
     let mut hash_alg_id = WideCString::new();
-    let (padding_info, flags) = padding.to_ffi_args(&mut hash_alg_id);
+    let padding = padding.map(|x| x.to_ffi_args(&mut hash_alg_id));
+    let padding_info = padding
+        .as_ref()
+        .map(|(padding, _)| padding as *const _ as *mut _);
+    let padding_info = padding_info.unwrap_or_else(null_mut);
+    let flags = padding.as_ref().map(|(_, flags)| *flags).unwrap_or(0);
+
     let mut result = 0;
 
     Error::check(unsafe {
         BCryptSignHash(
             key.handle,
-            &padding_info as *const _ as *mut _,
+            padding_info,
             input.as_ptr() as *mut _,
             input.len() as u32,
             null_mut(),
@@ -107,7 +152,7 @@ pub fn sign_hash(key: &KeyHandle, padding: SignaturePadding, input: &[u8]) -> Re
     Error::check(unsafe {
         BCryptSignHash(
             key.handle,
-            &padding_info as *const _ as *mut _,
+            padding_info,
             input.as_ptr() as *mut _,
             input.len() as u32,
             output.as_mut_ptr(),
@@ -123,17 +168,22 @@ pub fn sign_hash(key: &KeyHandle, padding: SignaturePadding, input: &[u8]) -> Re
 
 pub fn verify_signature(
     key: &KeyHandle,
-    padding: SignaturePadding,
+    padding: Option<SignaturePadding>,
     hash: &[u8],
     signature: &[u8],
 ) -> Result<()> {
     let mut hash_alg_id = WideCString::new();
-    let (padding_info, flags) = padding.to_ffi_args(&mut hash_alg_id);
+    let padding = padding.map(|x| x.to_ffi_args(&mut hash_alg_id));
+    let padding_info = padding
+        .as_ref()
+        .map(|(padding, _)| padding as *const _ as *mut _);
+    let padding_info = padding_info.unwrap_or_else(null_mut);
+    let flags = padding.as_ref().map(|(_, flags)| *flags).unwrap_or(0);
 
     Error::check(unsafe {
         BCryptVerifySignature(
             key.as_ptr(),
-            &padding_info as *const _ as *mut _,
+            padding_info,
             hash.as_ptr() as *mut _,
             hash.len() as u32,
             signature.as_ptr() as *mut _,
@@ -150,31 +200,36 @@ mod tests {
     #[test]
     fn hash_sign_verify() {
         use super::SignaturePadding;
-        use crate::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
         use crate::hash::HashAlgorithmId::*;
-        use winapi::shared::bcrypt::*;
 
-        let provider =
-            AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).expect("To open provider");
-        // TODO: Replace when key generation API will be wrapped
-        let mut key_handle = KeyHandle::new();
-        crate::Error::check(unsafe {
-            BCryptGenerateKeyPair(provider.handle.as_ptr(), key_handle.as_mut_ptr(), 1024, 0)
-        })
-        .unwrap();
-        crate::Error::check(unsafe { BCryptFinalizeKeyPair(key_handle.as_ptr(), 0) }).unwrap();
+        let key = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
 
         let digest: Vec<u8> = (0..32).collect();
         let padding = SignaturePadding::pkcs1(Sha256);
-        let signature =
-            super::sign_hash(&key_handle, padding, &*digest).expect("Signing to succeed");
-        verify_signature(&key_handle, padding, &digest, &signature).expect("Signature to be valid");
+        let signature = key
+            .sign(&*digest, Some(padding))
+            .expect("Signing to succeed");
+        key.verify(&digest, &signature, Some(padding))
+            .expect("Signature to be valid");
 
-        verify_signature(&key_handle, padding, &[0xDE, 0xAD], &signature).expect_err("Bad digest");
-        verify_signature(&key_handle, padding, &digest, &[0xDE, 0xAD]).expect_err("Bad signature");
+        key.verify(&[0xDE, 0xAD], &signature, Some(padding))
+            .expect_err("Bad digest");
+        key.verify(&digest, &[0xDE, 0xAD], Some(padding))
+            .expect_err("Bad signature");
         let padding_sha1 = SignaturePadding::pkcs1(Sha1);
         let padding_pss = SignaturePadding::pss(Sha256, 64);
-        verify_signature(&key_handle, padding_sha1, &digest, &signature).expect_err("Bad padding");
-        verify_signature(&key_handle, padding_pss, &digest, &signature).expect_err("Bad padding");
+        key.verify(&digest, &signature, Some(padding_sha1))
+            .expect_err("Bad padding");
+        key.verify(&digest, &signature, Some(padding_pss))
+            .expect_err("Bad padding");
+
+        let key = AsymmetricKey::builder(Ecdsa(NistP256)).build().unwrap();
+        let signature = key.sign(&*digest, None).expect("Signing to succeed");
+        key.verify(&digest, &signature, None)
+            .expect("Signature to be valid");
+        key.verify(&[0xDE, 0xAD], &signature, None)
+            .expect_err("Bad digest");
+        key.verify(&digest, &[0xDE, 0xAD], None)
+            .expect_err("Bad signature");
     }
 }

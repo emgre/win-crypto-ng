@@ -220,7 +220,7 @@ impl Algorithm for AsymmetricAlgorithmId {
 }
 
 pub struct AsymmetricKey<A: Algorithm = AsymmetricAlgorithmId, P: Parts = Public>(
-    KeyHandle,
+    pub(crate) KeyHandle,
     A,
     PhantomData<P>,
 );
