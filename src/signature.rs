@@ -4,7 +4,7 @@
 //! asymmetric cryptography.
 
 use crate::asymmetric::ecc::{NistP256, NistP384, NistP521};
-use crate::asymmetric::{AsymmetricKey, Ecdsa, Private, Rsa};
+use crate::asymmetric::{AsymmetricKey, Dsa, Ecdsa, Private, Public, Rsa};
 use crate::handle::{Handle, KeyHandle};
 use crate::hash::HashAlgorithmId;
 use crate::helpers::WideCString;
@@ -14,6 +14,9 @@ use winapi::shared::bcrypt::*;
 
 pub trait Signer {
     fn sign(&self, input: &[u8], padding: Option<SignaturePadding>) -> Result<Box<[u8]>>;
+}
+
+pub trait Verifier {
     fn verify(
         &self,
         hash: &[u8],
@@ -22,12 +25,19 @@ pub trait Signer {
     ) -> Result<()>;
 }
 
-macro_rules! impl_signer_for_key {
+macro_rules! impl_sign_verify {
     ($type: ty) => {
         impl Signer for $type {
             fn sign(&self, input: &[u8], padding: Option<SignaturePadding>) -> Result<Box<[u8]>> {
                 sign_hash(&self.0, padding, input)
             }
+        }
+        impl_verify!($type);
+    };
+}
+macro_rules! impl_verify {
+    ($type: ty) => {
+        impl Verifier for $type {
             fn verify(
                 &self,
                 hash: &[u8],
@@ -40,10 +50,16 @@ macro_rules! impl_signer_for_key {
     };
 }
 
-impl_signer_for_key!(AsymmetricKey<Rsa,Private>);
-impl_signer_for_key!(AsymmetricKey<Ecdsa<NistP256>, Private>);
-impl_signer_for_key!(AsymmetricKey<Ecdsa<NistP384>, Private>);
-impl_signer_for_key!(AsymmetricKey<Ecdsa<NistP521>, Private>);
+impl_sign_verify!(AsymmetricKey<Rsa, Private>);
+impl_verify!(AsymmetricKey<Rsa, Public>);
+impl_sign_verify!(AsymmetricKey<Dsa, Private>);
+impl_verify!(AsymmetricKey<Dsa, Public>);
+impl_sign_verify!(AsymmetricKey<Ecdsa<NistP256>, Private>);
+impl_verify!(AsymmetricKey<Ecdsa<NistP256>, Public>);
+impl_sign_verify!(AsymmetricKey<Ecdsa<NistP384>, Private>);
+impl_verify!(AsymmetricKey<Ecdsa<NistP384>, Public>);
+impl_sign_verify!(AsymmetricKey<Ecdsa<NistP521>, Private>);
+impl_verify!(AsymmetricKey<Ecdsa<NistP521>, Public>);
 
 /// Padding scheme to be used when creating/verifying a hash signature.
 #[derive(Clone, Copy)]
