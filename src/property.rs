@@ -206,14 +206,38 @@ impl Property for ObjectLength {
     type Value = DWORD;
 }
 
+/// [**BCRYPT_DSA_PARAMETERS**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_DSA_PARAMETERS)
+///
+/// `L"DSAParameters"`
+///
+/// Specifies parameters to use with a DSA key. This property is a
+/// `BCRYPT_DSA_PARAMETER_HEADER` or a `BCRYPT_DSA_PARAMETER_HEADER_V2` structure.
+/// This property can only be set and must be set for the key before the key is
+/// completed.
+///
+/// Windows 8: Beginning with Windows 8, this property can be
+/// a `BCRYPT_DSA_PARAMETER_HEADER_V2` structure. Use this structure if the key
+/// size exceeds 1024 bits and is less than or equal to 3072 bits. If the key
+/// size is greater than or equal to 512 but less than or equal to 1024 bits,
+/// use the `BCRYPT_DSA_PARAMETER_HEADER` structure.
 pub enum DsaParameters {}
 impl Property for DsaParameters {
     const IDENTIFIER: &'static str = BCRYPT_DSA_PARAMETERS;
+    // FIXME: Can we somehow use unsized unions?... We need to dynamically pass
+    // or receive V1/V2 structs.
     type Value = [u8];
 }
 
+/// [**BCRYPT_DH_PARAMETERS**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_DH_PARAMETERS)
+///
+/// `L"DHParameters"`
+///
+/// Specifies parameters to use with a Diffie-Hellman key. This data type is a
+/// pointer to a `BCRYPT_DH_PARAMETER_HEADER` structure. This property can only be
+/// set and must be set for the key before the key is completed.
 pub enum DhParameters {}
 impl Property for DhParameters {
     const IDENTIFIER: &'static str = BCRYPT_DH_PARAMETERS;
+    // TODO: Replace with appropriate blob type
     type Value = [u8];
 }
