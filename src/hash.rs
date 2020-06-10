@@ -309,7 +309,7 @@ impl Hash {
     pub fn hash_algorithm(&self) -> Result<HashAlgorithmId> {
         self.handle
             .get_property_unsized::<AlgorithmName>()
-            .map(|name| WideCString::from_bytes_with_nul(name).to_string())
+            .map(|name| WideCString::from_bytes_with_nul(name).unwrap().to_string())
             .map(|name| {
                 HashAlgorithmId::try_from(name.as_str())
                     .expect("Windows CNG API to return a correct algorithm name")
