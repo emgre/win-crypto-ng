@@ -67,6 +67,17 @@ impl Property for HashLength {
     type Value = DWORD;
 }
 
+/// [**BCRYPT_INITIALIZATION_VECTOR**](https://docs.microsoft.com/pl-pl/windows/win32/seccng/cng-property-identifiers#BCRYPT_INITIALIZATION_VECTOR)
+///
+/// L"IV"
+///
+/// Contains the initialization vector (IV) for a key. This property only applies to keys.
+pub enum InitializationVector {}
+impl Property for InitializationVector {
+    const IDENTIFIER: &'static str = bcrypt::BCRYPT_INITIALIZATION_VECTOR;
+    type Value = [u8];
+}
+
 /// [**BCRYPT_KEY_LENGTH**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_KEY_LENGTH)
 ///
 /// `L"KeyLength"`
