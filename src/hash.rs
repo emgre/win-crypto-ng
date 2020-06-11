@@ -47,7 +47,7 @@
 use crate::buffer::Buffer;
 use crate::handle::{AlgoHandle, Handle};
 use crate::helpers::WideCString;
-use crate::property::{Access, AlgorithmName, HashLength, ObjectLength};
+use crate::property::{Access, AlgorithmName, HashLength, InitializationVector, ObjectLength};
 use crate::{Error, Result};
 use std::convert::TryFrom;
 use std::ptr::null_mut;
@@ -90,13 +90,13 @@ pub enum HashAlgorithmId {
     // Standard: SP 800-38B.
     //
     // **Windows 8**: Support for this algorithm begins.
-    //AesCmac,
+    AesCmac,
     // The advanced encryption standard (AES) Galois message authentication code (GMAC) symmetric encryption algorithm.
     //
     // Standard: SP800-38D.
     //
     // **Windows Vista**: This algorithm is supported beginning with Windows Vista with SP1.
-    //AesGmac,
+    AesGmac,
 }
 
 impl HashAlgorithmId {
@@ -109,8 +109,8 @@ impl HashAlgorithmId {
             Self::Md2 => BCRYPT_MD2_ALGORITHM,
             Self::Md4 => BCRYPT_MD4_ALGORITHM,
             Self::Md5 => BCRYPT_MD5_ALGORITHM,
-            //Self::AesCmac => BCRYPT_AES_CMAC_ALGORITHM,
-            //Self::AesGmac => BCRYPT_AES_GMAC_ALGORITHM,
+            Self::AesCmac => BCRYPT_AES_CMAC_ALGORITHM,
+            Self::AesGmac => BCRYPT_AES_GMAC_ALGORITHM,
         }
     }
 }
@@ -127,6 +127,8 @@ impl<'a> TryFrom<&'a str> for HashAlgorithmId {
             BCRYPT_MD2_ALGORITHM => Ok(Self::Md2),
             BCRYPT_MD4_ALGORITHM => Ok(Self::Md4),
             BCRYPT_MD5_ALGORITHM => Ok(Self::Md5),
+            BCRYPT_AES_CMAC_ALGORITHM => Ok(Self::AesCmac),
+            BCRYPT_AES_GMAC_ALGORITHM => Ok(Self::AesGmac),
             val => Err(val),
         }
     }
@@ -156,6 +158,21 @@ impl HashAlgorithm {
 
     /// Creates a new hash from the algorithm
     pub fn new_hash(&self) -> Result<Hash> {
+        self.create_hash(None, None)
+    }
+
+    /// Creates a new Message Authentication Code (MAC), if supported by the
+    /// backing algorithm (AES-GMAC/AES-CMAC).
+    ///
+    /// Passing IV is required for GMAC mode, otherwise don't pass it for OMAC.
+    pub fn new_mac(&self, secret: &[u8], iv: Option<&[u8]>) -> Result<Hash> {
+        self.create_hash(Some(secret), iv)
+    }
+
+    fn create_hash(&self, secret: Option<&[u8]>, iv: Option<&[u8]>) -> Result<Hash> {
+        let (sec_ptr, sec_len) = secret
+            .map(|x| (x.as_ptr(), x.len()))
+            .unwrap_or((std::ptr::null(), 0));
         let object_size = self.handle.get_property::<ObjectLength>()?;
 
         let mut hash_handle = HashHandle::new();
@@ -166,15 +183,20 @@ impl HashAlgorithm {
                 hash_handle.as_mut_ptr(),
                 object.as_mut_ptr(),
                 object.len() as ULONG,
-                null_mut(),
+                sec_ptr as *mut _,
+                sec_len as ULONG,
                 0,
-                0,
-            ))
-            .map(|_| Hash {
-                handle: hash_handle,
-                object,
-            })
+            ))?;
+        };
+
+        if let Some(iv) = iv {
+            hash_handle.set_property::<InitializationVector>(iv)?;
         }
+
+        Ok(Hash {
+            handle: hash_handle,
+            object,
+        })
     }
 }
 
@@ -465,5 +487,75 @@ mod tests {
         let result1 = hash1.finish().unwrap();
         let result2 = hash2.finish().unwrap();
         assert_eq!(result1, result2);
+    }
+
+    trait HexSlice: std::borrow::Borrow<str> {
+        fn as_hex(&self) -> Vec<u8> {
+            let res: Vec<u8> = self
+                .borrow()
+                .as_bytes()
+                .rchunks(2)
+                .map(|slice| std::str::from_utf8(slice).unwrap())
+                .map(|chr| u8::from_str_radix(chr, 16).unwrap())
+                .rev()
+                .collect();
+            res
+        }
+    }
+    impl<'a> HexSlice for &'a str {}
+
+    #[test]
+    fn cmac() {
+        // Test vectors from
+        // https://csrc.nist.gov/CSRC/media/Projects/Block-Cipher-Techniques/documents/BCM/proposed-modes/omac/omac-ad.pdf
+        let test_vectors = vec![
+            ("2b7e151628aed2a6abf7158809cf4f3c", "", "bb1d6929e95937287fa37d129b756746"),
+            ("2b7e151628aed2a6abf7158809cf4f3c", "6bc1bee22e409f96e93d7e117393172a", "070a16b46b4d4144f79bdd9dd04a287c"),
+            ("2b7e151628aed2a6abf7158809cf4f3c", "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411", "dfa66747de9ae63030ca32611497c827"),
+            ("2b7e151628aed2a6abf7158809cf4f3c", "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710", "51f0bebf7e3b9d92fc49741779363cfe")
+        ];
+
+        for (key, msg, tag) in test_vectors {
+            let (key, msg, tag) = (&key.as_hex(), &msg.as_hex(), &tag.as_hex());
+            check_mac(HashAlgorithmId::AesCmac, msg, tag, key);
+        }
+    }
+
+    #[test]
+    fn gmac() {
+        // Test select vectors from (PTlen = 0 are effectively GMAC vectors)
+        // http://csrc.nist.gov/groups/STM/cavp/documents/mac/gcmtestvectors.zip
+        let algo = HashAlgorithm::open(HashAlgorithmId::AesGmac).unwrap();
+
+        let key = &"ce8d1103100fa290f953fbb439efdee4".as_hex();
+        let iv = &"4874c6f8082366fc7e49b933".as_hex();
+        let mut gmac = algo.new_mac(key, Some(iv)).unwrap();
+        gmac.hash(&"d69d033c32029789263c689e11ff7e9e8eefc48ddbc4e10eeae1c9edbb44f04e7cc6471501eadda3940ab433d0a8c210".as_hex()).unwrap(); // AAD
+        let digest = gmac.finish().unwrap();
+        assert_eq!(
+            digest.as_slice(),
+            &*"a5964b77af0b8aecd844d6adec8b7b1c".as_hex()
+        );
+
+        let key = &"4fedd84c9495e7ff81db48d367305d80".as_hex();
+        let iv = &"d82bfb016a35b5efa5e3438a".as_hex();
+        let mut gmac = algo.new_mac(key, Some(iv)).unwrap();
+        gmac.hash(&"0c80e282e64aeac2fba241686a9b33a6bdbac1230442e79fc5c0b6926158b0bf9b8562b570d784e749b69d64ed17f45e".as_hex()).unwrap(); // AAD
+        let digest = gmac.finish().unwrap();
+        assert_eq!(
+            digest.as_slice(),
+            &*"aad8933fdce92b9a24c2a9c2cc367291".as_hex()
+        );
+    }
+
+    fn check_mac(algo_id: HashAlgorithmId, data: &[u8], expected_hash: &[u8], secret: &[u8]) {
+        let algo = HashAlgorithm::open(algo_id).unwrap();
+        let mut hash = algo.new_mac(secret, None).unwrap();
+        let hash_size = hash.hash_size().unwrap();
+        hash.hash(data).unwrap();
+        let result = hash.finish().unwrap();
+
+        assert_eq!(hash_size, expected_hash.len());
+        assert_eq!(result.as_slice(), expected_hash);
     }
 }

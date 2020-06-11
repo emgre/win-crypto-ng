@@ -44,6 +44,7 @@ pub enum Error {
     AuthTagMismatch,
     InvalidBufferSize,
     Unsuccessful,
+    RequestOutOfSequence,
 
     BadData,
 
@@ -70,6 +71,7 @@ impl Error {
             ntstatus::STATUS_NOT_SUPPORTED => Err(Error::NotSupported),
             ntstatus::STATUS_AUTH_TAG_MISMATCH => Err(Error::AuthTagMismatch),
             ntstatus::STATUS_INVALID_BUFFER_SIZE => Err(Error::InvalidBufferSize),
+            ntstatus::STATUS_REQUEST_OUT_OF_SEQUENCE => Err(Error::RequestOutOfSequence),
             ntstatus::STATUS_NO_MEMORY | winapi::shared::winerror::NTE_NO_MEMORY => {
                 Err(Error::NoMemory)
             }
