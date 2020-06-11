@@ -362,7 +362,8 @@ pub trait Export<A: Algorithm, P: Parts>: Borrow<AsymmetricKey<A, P>> {
 }
 
 macro_rules! export_blobs {
-    ($type: ty, $parts: ty, $blob: ty, $blob_type: expr) => {
+    ($(($type: ty, $parts: ty, $blob: ty, $blob_type: expr)),*$(,)?) => {
+        $(
         impl<'a> Export<$type, $parts> for AsymmetricKey<$type, $parts> {
             type Blob = $blob;
 
@@ -370,111 +371,35 @@ macro_rules! export_blobs {
                 $blob_type
             }
         }
+        )*
     };
 }
 
+#[rustfmt::skip]
 export_blobs!(
-    AsymmetricAlgorithmId,
-    Public,
-    ErasedKeyBlob,
-    BlobType::PublicKey
+    (AsymmetricAlgorithmId, Public, ErasedKeyBlob, BlobType::PublicKey),
+    (AsymmetricAlgorithmId, Private, ErasedKeyBlob, BlobType::PrivateKey),
+    (Dh, Public, DhKeyPublicBlob, BlobType::DhPublic),
+    (Dh, Private, DhKeyPrivateBlob, BlobType::DhPrivate),
+    (Dsa, Public, DsaKeyPublicBlob, BlobType::DsaPublic),
+    (Dsa, Private, DsaKeyPrivateBlob, BlobType::DsaPrivate),
+    (Ecdh<NistP256>, Public, EccKeyPublicBlob, BlobType::EccPublic),
+    (Ecdh<NistP256>, Private, EccKeyPrivateBlob, BlobType::EccPrivate),
+    (Ecdh<NistP384>, Public, EccKeyPublicBlob, BlobType::EccPublic),
+    (Ecdh<NistP384>, Private, EccKeyPrivateBlob, BlobType::EccPrivate),
+    (Ecdh<NistP521>, Public, EccKeyPublicBlob, BlobType::EccPublic),
+    (Ecdh<NistP521>, Private, EccKeyPrivateBlob, BlobType::EccPrivate),
+    (Ecdsa<NistP256>, Public, EccKeyPublicBlob, BlobType::EccPublic),
+    (Ecdsa<NistP256>, Private, EccKeyPrivateBlob, BlobType::EccPrivate),
+    (Ecdsa<NistP384>, Public, EccKeyPublicBlob, BlobType::EccPublic),
+    (Ecdsa<NistP384>, Private, EccKeyPrivateBlob, BlobType::EccPrivate),
+    (Ecdsa<NistP521>, Public, EccKeyPublicBlob, BlobType::EccPublic),
+    (Ecdsa<NistP521>, Private, EccKeyPrivateBlob, BlobType::EccPrivate),
+    (Ecdh<Curve25519>, Public, EccKeyPublicBlob, BlobType::EccPublic),
+    (Ecdh<Curve25519>, Private, EccKeyPrivateBlob, BlobType::EccPrivate),
+    (Rsa, Public, RsaKeyPublicBlob, BlobType::RsaPublic),
+    (Rsa, Private, RsaKeyPrivateBlob, BlobType::RsaPrivate),
 );
-export_blobs!(
-    AsymmetricAlgorithmId,
-    Private,
-    ErasedKeyBlob,
-    BlobType::PrivateKey
-);
-export_blobs!(Dh, Public, DhKeyPublicBlob, BlobType::DhPublic);
-export_blobs!(Dh, Private, DhKeyPrivateBlob, BlobType::DhPrivate);
-export_blobs!(Dsa, Public, DsaKeyPublicBlob, BlobType::DsaPublic);
-export_blobs!(Dsa, Private, DsaKeyPrivateBlob, BlobType::DsaPrivate);
-export_blobs!(
-    Ecdh<NistP256>,
-    Public,
-    EccKeyPublicBlob,
-    BlobType::EccPublic
-);
-export_blobs!(
-    Ecdh<NistP256>,
-    Private,
-    EccKeyPrivateBlob,
-    BlobType::EccPrivate
-);
-export_blobs!(
-    Ecdh<NistP384>,
-    Public,
-    EccKeyPublicBlob,
-    BlobType::EccPublic
-);
-export_blobs!(
-    Ecdh<NistP384>,
-    Private,
-    EccKeyPrivateBlob,
-    BlobType::EccPrivate
-);
-export_blobs!(
-    Ecdh<NistP521>,
-    Public,
-    EccKeyPublicBlob,
-    BlobType::EccPublic
-);
-export_blobs!(
-    Ecdh<NistP521>,
-    Private,
-    EccKeyPrivateBlob,
-    BlobType::EccPrivate
-);
-export_blobs!(
-    Ecdsa<NistP256>,
-    Public,
-    EccKeyPublicBlob,
-    BlobType::EccPublic
-);
-export_blobs!(
-    Ecdsa<NistP256>,
-    Private,
-    EccKeyPrivateBlob,
-    BlobType::EccPrivate
-);
-export_blobs!(
-    Ecdsa<NistP384>,
-    Public,
-    EccKeyPublicBlob,
-    BlobType::EccPublic
-);
-export_blobs!(
-    Ecdsa<NistP384>,
-    Private,
-    EccKeyPrivateBlob,
-    BlobType::EccPrivate
-);
-export_blobs!(
-    Ecdsa<NistP521>,
-    Public,
-    EccKeyPublicBlob,
-    BlobType::EccPublic
-);
-export_blobs!(
-    Ecdsa<NistP521>,
-    Private,
-    EccKeyPrivateBlob,
-    BlobType::EccPrivate
-);
-export_blobs!(
-    Ecdh<Curve25519>,
-    Public,
-    EccKeyPublicBlob,
-    BlobType::EccPublic
-);
-export_blobs!(
-    Ecdh<Curve25519>,
-    Private,
-    EccKeyPrivateBlob,
-    BlobType::EccPrivate
-);
-export_blobs!(Rsa, Public, RsaKeyPublicBlob, BlobType::RsaPublic);
-export_blobs!(Rsa, Private, RsaKeyPrivateBlob, BlobType::RsaPrivate);
 
 use crate::key::*;
 
