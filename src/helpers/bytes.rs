@@ -69,9 +69,18 @@ pub unsafe trait AsBytes {
 pub unsafe trait FromBytes {
     /// Specified the minimum layout requirements for the allocation:
     /// - is at least as big as `min_layout().size()`
-    /// - reference/pointer is at least as aligned as `min_layout().align()`
+    /// - referenced/pointed data is at least as aligned as `min_layout().align()`
     ///
     /// For DSTs, final size should be exactly the same as the allocation's.
+    ///
+    /// # Safety
+    /// In Rust, it is considered [UB][UB] for pointers/references/`Box<T>`es to
+    /// be dangling, unaligned or pointing to invalid value.
+    ///
+    /// The alignment check is done using `min_layout` and thus can cause UB if
+    /// implemented incorrectly.
+    ///
+    /// [UB]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
     unsafe fn min_layout() -> std::alloc::Layout;
 
     fn from_bytes(bytes: &[u8]) -> &Self {
