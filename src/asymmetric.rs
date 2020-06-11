@@ -71,14 +71,14 @@ impl AsymmetricAlgorithmId {
         }
     }
 
-    pub fn key_bits(&self) -> Option<u32> {
+    pub fn key_bits(self) -> Option<u32> {
         match self {
             Self::Ecdh(curve) | Self::Ecdsa(curve) => Some(curve.key_bits()),
             _ => None,
         }
     }
 
-    pub fn is_key_bits_supported(&self, key_bits: u32) -> bool {
+    pub fn is_key_bits_supported(self, key_bits: u32) -> bool {
         match (self, key_bits) {
             | (Self::Dh, 512..=4096)
             | (Self::Rsa, 512..=16384)
