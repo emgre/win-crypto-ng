@@ -1,3 +1,5 @@
+//! C-compatible dynamic inline structure
+
 use crate::helpers::bytes::{AsBytes, FromBytes};
 
 /// C-compatible dynamic inline structure.
@@ -6,7 +8,7 @@ use crate::helpers::bytes::{AsBytes, FromBytes};
 /// but with trailing data of size dependent on the header field values.
 ///
 /// # Layout
-/// The structure is marked as `#[repr(packed)]` to be layout-compatible with
+/// The structure is marked as `#[repr(C, packed)]` to be layout-compatible with
 /// regular byte slice (`[u8]`) since it's mostly constructed from `Box<[u8]>`
 /// via C FFI.
 ///
@@ -28,8 +30,8 @@ impl<'a, T: BlobLayout> Blob<T> {
         // `Self::from_boxed`, which requires that the source reference is
         // aligned at least as `T::Header` and since `Blob` is
         // `#[repr(C)]` (and so is `T::Header`, because it  implements `AsBytes`
-        // which requires which requires being `#[repr(C)]`), so the reference
-        // to its first field will be aligned at least as `T::Header`.
+        // which requires being `#[repr(C)]`), so the reference to its first
+        // field will be aligned at least as `T::Header`.
         unsafe { &self.0 }
     }
 
@@ -54,8 +56,9 @@ impl<'a, T: BlobLayout> Blob<T> {
     }
 }
 
-// SAFETY: The entire struct is `#[repr(C)]` and so is the header (because it
-// implements `AsBytes` as well)
+// SAFETY: The struct is `#[repr(C)]` and so is the header because it implements
+// `AsBytes` as well, so the layout is well-defined and data can be converted to
+// bytes
 unsafe impl<T: BlobLayout> AsBytes for Blob<T> {}
 
 unsafe impl<T: BlobLayout> FromBytes for Blob<T> {
@@ -119,7 +122,7 @@ macro_rules! blob {
                 let tail_len: usize = 0 $( + blob! { size: header, $($len)*} )*;
 
                 // To err on the safe side, despite `Blob` being
-                // `#[repr(packed)]`, we pad the tail allocation as if it was
+                // `#[repr(C, packed)]`, we pad the tail allocation as if it was
                 // a regular, padded struct.
                 // We assume that header is #[repr(C)] and that its alignment is
                 // the largest required alignment for its field.

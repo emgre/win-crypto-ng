@@ -1,4 +1,4 @@
-//! Facilitating abstractions for FFI usage.
+//! Facilitating abstractions for FFI usage
 
 pub mod bytes;
 pub use bytes::{AsBytes, FromBytes, Pod};
