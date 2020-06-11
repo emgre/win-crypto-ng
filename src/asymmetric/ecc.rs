@@ -57,7 +57,7 @@ pub enum NamedCurve {
 }
 
 impl NamedCurve {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::NistP256 => BCRYPT_ECC_CURVE_NISTP256,
             Self::NistP384 => BCRYPT_ECC_CURVE_NISTP384,
@@ -66,7 +66,7 @@ impl NamedCurve {
         }
     }
 
-    pub fn key_bits(&self) -> u32 {
+    pub fn key_bits(self) -> u32 {
         match self {
             Self::NistP256 => NistP256.key_bits(),
             Self::NistP384 => NistP384.key_bits(),
