@@ -196,7 +196,7 @@ blob! {
     header: BCRYPT_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    view: struct ref ErasedKeyBlobView {
+    view: struct ref ErasedKeyPayload {
         phantom[0],
     }
 }
@@ -207,7 +207,7 @@ blob! {
     header: BCRYPT_RSAKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    view: struct ref RsaKeyPublicViewTail {
+    view: struct ref RsaKeyPublicPayload {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
     }
@@ -215,13 +215,11 @@ blob! {
 
 unsafe impl Pod for BCRYPT_RSAKEY_BLOB {}
 blob! {
-    #[derive(Debug)]
     enum RsaKeyPrivateBlob {},
     header: BCRYPT_RSAKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    #[derive(Debug)]
-    view: struct ref RsaKeyBlobPrivateTail {
+    view: struct ref RsaKeyPrivatePayload {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
         prime1[cbPrime1],
@@ -234,7 +232,7 @@ blob! {
     header: BCRYPT_RSAKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
-    view: struct ref RsaKeyBlobFullPrivateTail {
+    view: struct ref RsaKeyFullPrivatePayload {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
         prime1[cbPrime1],
@@ -252,7 +250,7 @@ blob! {
     header: BCRYPT_DH_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
-    view: struct ref DhKeyBlobPublicTail {
+    view: struct ref DhKeyPublicPayload {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -264,7 +262,7 @@ blob! {
     header: BCRYPT_DH_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
-    view: struct ref DhKeyBlobPrivateTail {
+    view: struct ref DhKeyPrivatePayload {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -278,7 +276,7 @@ blob! {
     header: BCRYPT_DSA_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
-    view: struct ref DsaKeyBlobPublicTail {
+    view: struct ref DsaKeyPublicPayload {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -290,7 +288,7 @@ blob! {
     header: BCRYPT_DSA_KEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
-    view: struct ref DsaKeyBlobPrivateTail {
+    view: struct ref DsaKeyPrivatePayload {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -304,7 +302,7 @@ blob! {
     header: BCRYPT_DSA_KEY_BLOB_V2,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
-    view: struct ref DsaKeyBlobPublicV2Tail {
+    view: struct ref DsaKeyPublicV2Payload {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -316,7 +314,7 @@ blob! {
     header: BCRYPT_DSA_KEY_BLOB_V2,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
-    view: struct ref DsaKeyBlobPrivateV2Tail {
+    view: struct ref DsaKeyPrivateV2Payload {
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -330,7 +328,7 @@ blob! {
     header: BCRYPT_ECCKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
-    view: struct ref EccKeyBlobPublicTail {
+    view: struct ref EccKeyPublicPayload {
         x[cbKey],
         y[cbKey],
     }
@@ -341,7 +339,7 @@ blob! {
     header: BCRYPT_ECCKEY_BLOB,
     /// All the fields are stored as a big-endian multiprecision integer.
     /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
-    view: struct ref EccKeyBlobPrivateTail {
+    view: struct ref EccKeyPrivatePayload {
         x[cbKey],
         y[cbKey],
         d[cbKey],
