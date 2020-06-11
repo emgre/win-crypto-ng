@@ -131,13 +131,8 @@ macro_rules! blob {
 
                 let mut boxed = vec![0u8; header_len + tail_len + tail_padding].into_boxed_slice();
 
-                let header_as_bytes = unsafe {
-                    std::slice::from_raw_parts(
-                        header as *const _ as *const u8,
-                        header_len
-                    )
-                };
-                &mut boxed[..header_len].copy_from_slice(header_as_bytes);
+                let header_bytes = $crate::helpers::AsBytes::as_bytes(header);
+                &mut boxed[..header_len].copy_from_slice(header_bytes);
                 let mut offset = header_len;
                 $(
                     let field_len = blob! { size: header, $($len)*};
