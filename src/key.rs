@@ -192,10 +192,10 @@ key_blobs! {
 }
 
 blob! {
+    /// Dynamic struct layout for dynamically determined key blob.
     enum ErasedKeyBlob {},
     header: BCRYPT_KEY_BLOB,
-    /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
+    /// Phantom payload for dynamically determined key blob.
     view: struct ref ErasedKeyPayload {
         phantom[0],
     }
@@ -203,10 +203,12 @@ blob! {
 
 unsafe impl Pod for BCRYPT_KEY_BLOB {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_RSAPUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
     enum RsaKeyPublicBlob {},
     header: BCRYPT_RSAKEY_BLOB,
+    /// Trailing data for [`BCRYPT_RSAPUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
     view: struct ref RsaKeyPublicPayload {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
@@ -215,10 +217,12 @@ blob! {
 
 unsafe impl Pod for BCRYPT_RSAKEY_BLOB {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_RSAPRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
     enum RsaKeyPrivateBlob {},
     header: BCRYPT_RSAKEY_BLOB,
+    /// Trailing data for [`BCRYPT_RSAPRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
     view: struct ref RsaKeyPrivatePayload {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
@@ -228,10 +232,12 @@ blob! {
 }
 
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_RSAFULLPRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
     enum RsaKeyFullPrivateBlob {},
     header: BCRYPT_RSAKEY_BLOB,
+    /// Trailing data for [`BCRYPT_RSAFULLPRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_rsakey_blob.
     view: struct ref RsaKeyFullPrivatePayload {
         pub_exp[cbPublicExp],
         modulus[cbModulus],
@@ -246,10 +252,12 @@ blob! {
 
 unsafe impl Pod for BCRYPT_DH_KEY_BLOB {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_DH_PUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob).
     enum DhKeyPublicBlob {},
     header: BCRYPT_DH_KEY_BLOB,
+    /// Trailing data for [`BCRYPT_DH_PUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
     view: struct ref DhKeyPublicPayload {
         modulus[cbKey],
         generator[cbKey],
@@ -258,10 +266,12 @@ blob! {
 }
 
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_DH_PRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob).
     enum DhKeyPrivateBlob {},
     header: BCRYPT_DH_KEY_BLOB,
+    /// Trailing data for [`BCRYPT_DH_PRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_key_blob
     view: struct ref DhKeyPrivatePayload {
         modulus[cbKey],
         generator[cbKey],
@@ -272,10 +282,12 @@ blob! {
 
 unsafe impl Pod for BCRYPT_DSA_KEY_BLOB {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_DSA_PUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob).
     enum DsaKeyPublicBlob {},
     header: BCRYPT_DSA_KEY_BLOB,
+    /// Trailing data for [`BCRYPT_DSA_PUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
     view: struct ref DsaKeyPublicPayload {
         modulus[cbKey],
         generator[cbKey],
@@ -284,10 +296,12 @@ blob! {
 }
 
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_DSA_PRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob).
     enum DsaKeyPrivateBlob {},
     header: BCRYPT_DSA_KEY_BLOB,
+    /// Trailing data for [`BCRYPT_DSA_PRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob
     view: struct ref DsaKeyPrivatePayload {
         modulus[cbKey],
         generator[cbKey],
@@ -298,10 +312,17 @@ blob! {
 
 unsafe impl Pod for BCRYPT_DSA_KEY_BLOB_V2 {}
 blob! {
+    /// Dynamic struct layout for
+    /// [`BCRYPT_DSA_PUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2)
+    /// (V2).
     enum DsaKeyPublicV2Blob {},
     header: BCRYPT_DSA_KEY_BLOB_V2,
+    /// Trailing data for
+    /// [`BCRYPT_DSA_PUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2)
+    /// for DSA keys that exceed 1024 bits in length but are less than or equal
+    /// to 3072 bits.
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
     view: struct ref DsaKeyPublicV2Payload {
         modulus[cbKey],
         generator[cbKey],
@@ -310,10 +331,17 @@ blob! {
 }
 
 blob! {
+    /// Dynamic struct layout for
+    /// [`BCRYPT_DSA_PRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2)
+    /// (V2).
     enum DsaKeyPrivateV2Blob {},
     header: BCRYPT_DSA_KEY_BLOB_V2,
+    /// Trailing data for
+    /// [`BCRYPT_DSA_PRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2)
+    /// for DSA keys that exceed 1024 bits in length but are less than or equal
+    /// to 3072 bits.
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_key_blob_v2
     view: struct ref DsaKeyPrivateV2Payload {
         modulus[cbKey],
         generator[cbKey],
@@ -324,10 +352,12 @@ blob! {
 
 unsafe impl Pod for BCRYPT_ECCKEY_BLOB {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_ECCPUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecc_key_blob).
     enum EccKeyPublicBlob {},
     header: BCRYPT_ECCKEY_BLOB,
+    /// Trailing data for [`BCRYPT_ECCPUBLIC_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecc_key_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
     view: struct ref EccKeyPublicPayload {
         x[cbKey],
         y[cbKey],
@@ -335,10 +365,12 @@ blob! {
 }
 
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_ECCPRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob).
     enum EccKeyPrivateBlob {},
     header: BCRYPT_ECCKEY_BLOB,
+    /// Trailing data for [`BCRYPT_ECCPRIVATE_BLOB`](https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob).
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_ecckey_blob
     view: struct ref EccKeyPrivatePayload {
         x[cbKey],
         y[cbKey],
