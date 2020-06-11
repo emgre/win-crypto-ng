@@ -1,4 +1,4 @@
-//! Owned Unicode, nul-aware and nul-terminated wide string.
+//! Owned Unicode, nul-aware and nul-terminated wide string
 //!
 //! Provides a lossless conversion for FFI APIs expecting an Unicode
 //! nul-terminated string.
