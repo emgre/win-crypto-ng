@@ -2,6 +2,7 @@
 
 use crate::blob;
 use crate::helpers::blob::{Blob, BlobLayout};
+use crate::helpers::Pod;
 use core::convert::TryFrom;
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::ULONG;
@@ -200,6 +201,7 @@ blob! {
     }
 }
 
+unsafe impl Pod for BCRYPT_KEY_BLOB {}
 blob! {
     enum RsaKeyPublicBlob {},
     header: BCRYPT_RSAKEY_BLOB,
@@ -211,6 +213,7 @@ blob! {
     }
 }
 
+unsafe impl Pod for BCRYPT_RSAKEY_BLOB {}
 blob! {
     #[derive(Debug)]
     enum RsaKeyPrivateBlob {},
@@ -243,6 +246,7 @@ blob! {
     }
 }
 
+unsafe impl Pod for BCRYPT_DH_KEY_BLOB {}
 blob! {
     enum DhKeyPublicBlob {},
     header: BCRYPT_DH_KEY_BLOB,
@@ -268,6 +272,7 @@ blob! {
     }
 }
 
+unsafe impl Pod for BCRYPT_DSA_KEY_BLOB {}
 blob! {
     enum DsaKeyPublicBlob {},
     header: BCRYPT_DSA_KEY_BLOB,
@@ -293,6 +298,7 @@ blob! {
     }
 }
 
+unsafe impl Pod for BCRYPT_DSA_KEY_BLOB_V2 {}
 blob! {
     enum DsaKeyPublicV2Blob {},
     header: BCRYPT_DSA_KEY_BLOB_V2,
@@ -318,6 +324,7 @@ blob! {
     }
 }
 
+unsafe impl Pod for BCRYPT_ECCKEY_BLOB {}
 blob! {
     enum EccKeyPublicBlob {},
     header: BCRYPT_ECCKEY_BLOB,

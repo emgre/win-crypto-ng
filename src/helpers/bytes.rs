@@ -165,17 +165,4 @@ where
     }
 }
 
-use winapi::shared::bcrypt;
 unsafe impl Pod for u32 {} // Ignores endianness
-unsafe impl Pod for bcrypt::BCRYPT_KEY_LENGTHS_STRUCT {}
-
-unsafe impl Pod for bcrypt::BCRYPT_DH_PARAMETER_HEADER {}
-unsafe impl Pod for bcrypt::BCRYPT_DSA_PARAMETER_HEADER {}
-unsafe impl Pod for bcrypt::BCRYPT_DSA_PARAMETER_HEADER_V2 {}
-
-unsafe impl Pod for bcrypt::BCRYPT_KEY_BLOB {}
-unsafe impl Pod for bcrypt::BCRYPT_DH_KEY_BLOB {}
-unsafe impl Pod for bcrypt::BCRYPT_DSA_KEY_BLOB {}
-unsafe impl Pod for bcrypt::BCRYPT_DSA_KEY_BLOB_V2 {}
-unsafe impl Pod for bcrypt::BCRYPT_ECCKEY_BLOB {}
-unsafe impl Pod for bcrypt::BCRYPT_RSAKEY_BLOB {}

@@ -1,7 +1,7 @@
 //! Named properties for CNG objects.
 
 use crate::handle::Handle;
-use crate::helpers::{FromBytes, WideCString};
+use crate::helpers::{FromBytes, Pod, WideCString};
 use crate::{Error, Result};
 use core::mem::{self, MaybeUninit};
 use core::ptr;
@@ -98,6 +98,8 @@ pub trait Property {
     const IDENTIFIER: &'static str;
     type Value: FromBytes + ?Sized;
 }
+
+unsafe impl Pod for BCRYPT_KEY_LENGTHS_STRUCT {}
 
 /// [**BCRYPT_ALGORITHM_NAME**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_ALGORITHM_NAME)
 ///
