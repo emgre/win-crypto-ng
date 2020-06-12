@@ -186,6 +186,26 @@ impl RandomNumberGenerator {
     }
 }
 
+#[cfg(feature = "rand-trait")]
+impl rand_core::CryptoRng for RandomNumberGenerator {}
+#[cfg(feature = "rand-trait")]
+impl rand_core::RngCore for RandomNumberGenerator {
+    fn next_u32(&mut self) -> u32 {
+        rand_core::impls::next_u32_via_fill(self)
+    }
+    fn next_u64(&mut self) -> u64 {
+        rand_core::impls::next_u64_via_fill(self)
+    }
+    fn fill_bytes(&mut self, dst: &mut [u8]) {
+        // Panics are allowed in `fill_bytes`
+        self.try_fill_bytes(dst).unwrap()
+    }
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> std::result::Result<(), rand_core::Error> {
+        self.gen_random(dst)
+            .map_err(|e| From::<core::num::NonZeroU32>::from(e.into()))
+    }
+}
+
 /// Wrapper around `AlgoHandle` that can only specify RNG algorithms.
 enum RandomAlgoHandle {
     /// System-preferred algorithm provider.

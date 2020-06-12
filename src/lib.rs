@@ -12,6 +12,7 @@ use winapi::shared::ntdef::NTSTATUS;
 use winapi::shared::ntstatus;
 
 use std::fmt;
+use std::num::NonZeroU32;
 
 pub mod asymmetric;
 pub mod buffer;
@@ -81,6 +82,28 @@ impl Error {
             ntstatus::STATUS_UNSUCCESSFUL => Err(Error::Unsuccessful),
             value => Err(Error::Unknown(value)),
         }
+    }
+}
+
+impl Into<NonZeroU32> for Error {
+    fn into(self) -> NonZeroU32 {
+        let code: i32 = match self {
+            Error::NotFound => ntstatus::STATUS_NOT_FOUND,
+            Error::InvalidParameter => ntstatus::STATUS_INVALID_PARAMETER,
+            Error::BufferTooSmall => ntstatus::STATUS_BUFFER_TOO_SMALL,
+            Error::InvalidHandle => ntstatus::STATUS_INVALID_HANDLE,
+            Error::InvalidSignature => ntstatus::STATUS_INVALID_SIGNATURE,
+            Error::NotSupported => ntstatus::STATUS_NOT_SUPPORTED,
+            Error::AuthTagMismatch => ntstatus::STATUS_AUTH_TAG_MISMATCH,
+            Error::InvalidBufferSize => ntstatus::STATUS_INVALID_BUFFER_SIZE,
+            Error::RequestOutOfSequence => ntstatus::STATUS_REQUEST_OUT_OF_SEQUENCE,
+            Error::NoMemory => ntstatus::STATUS_NO_MEMORY,
+            Error::BadData => ntstatus::STATUS_DATA_ERROR,
+            Error::Unsuccessful => ntstatus::STATUS_UNSUCCESSFUL,
+            Error::Unknown(value) => value,
+        };
+
+        NonZeroU32::new(code.abs() as u32).expect("Error to not be STATUS_SUCCESS")
     }
 }
 
