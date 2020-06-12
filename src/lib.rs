@@ -75,7 +75,9 @@ impl Error {
             ntstatus::STATUS_NO_MEMORY | winapi::shared::winerror::NTE_NO_MEMORY => {
                 Err(Error::NoMemory)
             }
-            winapi::shared::winerror::NTE_BAD_DATA => Err(Error::BadData),
+            ntstatus::STATUS_DATA_ERROR | winapi::shared::winerror::NTE_BAD_DATA => {
+                Err(Error::BadData)
+            }
             ntstatus::STATUS_UNSUCCESSFUL => Err(Error::Unsuccessful),
             value => Err(Error::Unknown(value)),
         }
