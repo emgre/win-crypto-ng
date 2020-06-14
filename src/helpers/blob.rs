@@ -124,15 +124,7 @@ macro_rules! blob {
                 let header_len = std::mem::size_of_val(header);
                 let tail_len: usize = 0 $( + blob! { size: header, $($len)*} )*;
 
-                // To err on the safe side, despite `Blob` being
-                // `#[repr(C, packed)]`, we pad the tail allocation as if it was
-                // a regular, padded struct.
-                // We assume that header is #[repr(C)] and that its alignment is
-                // the largest required alignment for its field.
-                let align = std::mem::align_of_val(header);
-                let tail_padding = (align - (tail_len % align)) % align;
-
-                let mut boxed = vec![0u8; header_len + tail_len + tail_padding].into_boxed_slice();
+                let mut boxed = vec![0u8; header_len + tail_len].into_boxed_slice();
 
                 let header_bytes = $crate::helpers::AsBytes::as_bytes(header);
                 &mut boxed[..header_len].copy_from_slice(header_bytes);
@@ -234,7 +226,7 @@ mod tests {
                 some_member: &[1u8, 2, 3, 4, 5],
             },
         );
-        // Account for trailing padding
-        assert_eq!(8, std::mem::size_of_val(&*inline));
+        // *NO* trailing padding (Due to Blob being `#[repr(C, packed)])`
+        assert_eq!(7, std::mem::size_of_val(&*inline));
     }
 }
