@@ -66,7 +66,7 @@ impl Builder<Dsa> {
     pub fn key_bits_in_1024_3072(
         self,
         key_bits: u32,
-    ) -> Result<BuilderWithKeyBits<Dsa, KeyBitsGte1024Lte3072>> {
+    ) -> Result<BuilderWithKeyBits<Dsa, KeyBitsGt1024Lte3072>> {
         match key_bits {
             1024..=3072 => {}
             _ => return Err(Error::InvalidParameter),
@@ -88,9 +88,9 @@ impl KeyConstraint for NoConstraint {}
 /// Key size in bits has to be in the [512, 1024] range.
 pub struct KeyBitsGte512Lte1024 {}
 impl KeyConstraint for KeyBitsGte512Lte1024 {}
-/// Key size in bits has to be in the [512, 1024] range.
-pub struct KeyBitsGte1024Lte3072 {}
-impl KeyConstraint for KeyBitsGte1024Lte3072 {}
+/// Key size in bits has to be in the (1024, 3072] range.
+pub struct KeyBitsGt1024Lte3072 {}
+impl KeyConstraint for KeyBitsGt1024Lte3072 {}
 
 /// Builder type with key length provided in bits.
 pub struct BuilderWithKeyBits<A: Algorithm, C: KeyConstraint = NoConstraint> {
@@ -176,7 +176,7 @@ impl BuilderWithKeyBits<Dsa, KeyBitsGte512Lte1024> {
     }
 }
 
-impl BuilderWithKeyBits<Dsa, KeyBitsGte1024Lte3072> {
+impl BuilderWithKeyBits<Dsa, KeyBitsGt1024Lte3072> {
     pub fn with_params(self, params: DsaParamsV2) -> BuilderWithParams<Dsa, DsaParamsV2> {
         BuilderWithParams {
             algorithm: self.algorithm,
