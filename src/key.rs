@@ -324,6 +324,11 @@ blob! {
     ///
     /// All the fields are stored as a big-endian multiprecision integer.
     view: struct ref DsaKeyPublicV2Payload {
+        // docs.microsoft.com are incorrect and seems to have a copy/paste mistake.
+        // Refer to layout this layout instead:
+        // https://github.com/dotnet/runtime/blob/67d74fca70d4670ad503e23dba9d6bc8a1b5909e/src/libraries/Common/src/System/Security/Cryptography/DSACng.ImportExport.cs#L246-L254
+        seed[cbSeedLength],
+        group[cbGroupSize],
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
@@ -343,10 +348,15 @@ blob! {
     ///
     /// All the fields are stored as a big-endian multiprecision integer.
     view: struct ref DsaKeyPrivateV2Payload {
+        // docs.microsoft.com are incorrect and seems to have a copy/paste mistake.
+        // Refer to layout this layout instead:
+        // https://github.com/dotnet/runtime/blob/67d74fca70d4670ad503e23dba9d6bc8a1b5909e/src/libraries/Common/src/System/Security/Cryptography/DSACng.ImportExport.cs#L246-L254
+        seed[cbSeedLength],
+        group[cbGroupSize],
         modulus[cbKey],
         generator[cbKey],
         public[cbKey],
-        priv_exp[20],
+        priv_exp[cbGroupSize],
     }
 }
 
