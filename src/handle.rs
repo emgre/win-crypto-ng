@@ -92,3 +92,27 @@ impl Handle for KeyHandle {
         &mut self.handle
     }
 }
+
+pub struct SecretHandle {
+    pub(crate) handle: BCRYPT_SECRET_HANDLE,
+}
+
+impl Drop for SecretHandle {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe {
+                BCryptDestroySecret(self.handle);
+            }
+        }
+    }
+}
+
+impl Handle for SecretHandle {
+    fn as_ptr(&self) -> BCRYPT_SECRET_HANDLE {
+        self.handle
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut BCRYPT_SECRET_HANDLE {
+        &mut self.handle
+    }
+}
