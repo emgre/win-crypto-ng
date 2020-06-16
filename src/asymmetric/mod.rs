@@ -821,6 +821,187 @@ impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPrivateBlob {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct OaepPadding {
+    algorithm: crate::hash::HashAlgorithmId,
+    label: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub enum EncryptionPadding {
+    Oaep(OaepPadding),
+    Pkcs1,
+}
+
+struct OaepPaddingInfo<'a> {
+    _borrowed: &'a OaepPadding,
+    value: BCRYPT_OAEP_PADDING_INFO,
+}
+
+impl OaepPadding {
+    fn to_ffi_args<'a>(&self, out: &'a mut WideCString) -> OaepPaddingInfo {
+        *out = WideCString::from(self.algorithm.as_str());
+        OaepPaddingInfo {
+            _borrowed: self,
+            value: BCRYPT_OAEP_PADDING_INFO {
+                pszAlgId: out.as_ptr(),
+                pbLabel: self.label.as_ptr() as *mut _,
+                cbLabel: self.label.len() as u32,
+            },
+        }
+    }
+}
+
+impl EncryptionPadding {
+    fn to_ffi_args<'a>(&'a self, out: &'a mut WideCString) -> (Option<OaepPaddingInfo<'a>>, u32) {
+        match self {
+            Self::Oaep(oaep_padding) => (Some(oaep_padding.to_ffi_args(out)), BCRYPT_PAD_OAEP),
+            Self::Pkcs1 => (None, BCRYPT_PAD_PKCS1),
+        }
+    }
+}
+
+impl AsymmetricKey<Rsa, Private> {
+    pub fn encrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
+        use crate::handle::Handle;
+        use std::ptr::null_mut;
+
+        let mut out = WideCString::new();
+        let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));
+
+        let (pad_info, flags) = padding.as_ref().unwrap_or(&(None, 0));
+        let pad_info = pad_info
+            .as_ref()
+            .map(|pad| &pad.value as *const BCRYPT_OAEP_PADDING_INFO as *mut _);
+
+        let mut encrypted_len = 0;
+        unsafe {
+            crate::Error::check(BCryptEncrypt(
+                self.0.as_ptr(),
+                data.as_ptr() as _,
+                data.len() as _,
+                pad_info.unwrap_or_else(null_mut),
+                null_mut(),
+                0,
+                null_mut(),
+                0,
+                &mut encrypted_len,
+                *flags,
+            ))?;
+
+            let mut output = vec![0u8; encrypted_len as usize];
+
+            crate::Error::check(BCryptEncrypt(
+                self.0.as_ptr(),
+                data.as_ptr() as _,
+                data.len() as _,
+                pad_info.unwrap_or_else(null_mut),
+                null_mut(),
+                0,
+                output.as_mut_ptr(),
+                output.len() as u32,
+                &mut encrypted_len,
+                *flags,
+            ))
+            .map(|_| output.into_boxed_slice())
+        }
+    }
+}
+
+impl AsymmetricKey<Rsa, Public> {
+    pub fn encrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
+        use crate::handle::Handle;
+        use std::ptr::null_mut;
+
+        let mut out = WideCString::new();
+        let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));
+
+        let (pad_info, flags) = padding.as_ref().unwrap_or(&(None, 0));
+        let pad_info = pad_info
+            .as_ref()
+            .map(|pad| &pad.value as *const BCRYPT_OAEP_PADDING_INFO as *mut _);
+
+        let mut encrypted_len = 0;
+        unsafe {
+            crate::Error::check(BCryptEncrypt(
+                self.0.as_ptr(),
+                data.as_ptr() as _,
+                data.len() as _,
+                pad_info.unwrap_or_else(null_mut),
+                null_mut(),
+                0,
+                null_mut(),
+                0,
+                &mut encrypted_len,
+                *flags,
+            ))?;
+
+            let mut output = vec![0u8; encrypted_len as usize];
+
+            crate::Error::check(BCryptEncrypt(
+                self.0.as_ptr(),
+                data.as_ptr() as _,
+                data.len() as _,
+                pad_info.unwrap_or_else(null_mut),
+                null_mut(),
+                0,
+                output.as_mut_ptr(),
+                output.len() as u32,
+                &mut encrypted_len,
+                *flags,
+            ))
+            .map(|_| output.into_boxed_slice())
+        }
+    }
+}
+
+impl AsymmetricKey<Rsa, Private> {
+    pub fn decrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
+        use crate::handle::Handle;
+        use std::ptr::null_mut;
+
+        let mut out = WideCString::new();
+        let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));
+
+        let (pad_info, flags) = padding.as_ref().unwrap_or(&(None, 0));
+        let pad_info = pad_info
+            .as_ref()
+            .map(|pad| &pad.value as *const BCRYPT_OAEP_PADDING_INFO as *mut _);
+
+        let mut encrypted_len = 0;
+        unsafe {
+            crate::Error::check(BCryptDecrypt(
+                self.0.as_ptr(),
+                data.as_ptr() as _,
+                data.len() as _,
+                pad_info.unwrap_or_else(null_mut),
+                null_mut(),
+                0,
+                null_mut(),
+                0,
+                &mut encrypted_len,
+                *flags,
+            ))?;
+
+            let mut output = vec![0u8; encrypted_len as usize];
+
+            crate::Error::check(BCryptDecrypt(
+                self.0.as_ptr(),
+                data.as_ptr() as _,
+                data.len() as _,
+                pad_info.unwrap_or_else(null_mut),
+                null_mut(),
+                0,
+                output.as_mut_ptr(),
+                output.len() as u32,
+                &mut encrypted_len,
+                *flags,
+            ))
+            .map(|_| output.into_boxed_slice())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -863,5 +1044,42 @@ mod tests {
         dbg!(blob.y().len());
         dbg!(blob.d().len());
         Ok(())
+    }
+
+    #[test]
+    fn encrypt() {
+        let key = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
+
+        let plaintext = b"This is an important message.";
+
+        let ciphertext = key.encrypt(None, &*plaintext);
+        // Can't encrypt incomplete blocks without any padding
+        assert!(ciphertext.is_err());
+
+        let padding = Some(EncryptionPadding::Pkcs1);
+        let ciphertext = key.encrypt(padding.clone(), &*plaintext).unwrap();
+        assert_eq!(ciphertext.len(), 1024 / 8);
+        let decoded = key.decrypt(padding, ciphertext.as_ref()).unwrap();
+        assert_eq!(plaintext, decoded.as_ref());
+
+        let padding = Some(EncryptionPadding::Oaep(OaepPadding {
+            algorithm: crate::hash::HashAlgorithmId::Sha256,
+            label: Vec::from(b"some data" as &[_]),
+        }));
+        let ciphertext = key.encrypt(padding.clone(), &*plaintext).unwrap();
+        assert_eq!(ciphertext.len(), 1024 / 8);
+        let decoded = key.decrypt(padding.clone(), ciphertext.as_ref()).unwrap();
+        assert_eq!(plaintext, decoded.as_ref());
+
+        // Check if private key can decrypt what's been encrypted with public one
+        let blob = key.as_public().export().unwrap();
+        let provider = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
+        let public_key = AsymmetricKey::<Rsa, Public>::import(Rsa, &provider, &blob).unwrap();
+
+        let padding = Some(EncryptionPadding::Pkcs1);
+        let ciphertext = public_key.encrypt(padding.clone(), &*plaintext).unwrap();
+        assert_eq!(ciphertext.len(), 1024 / 8);
+        let decoded = key.decrypt(padding, ciphertext.as_ref()).unwrap();
+        assert_eq!(plaintext, decoded.as_ref());
     }
 }
