@@ -44,7 +44,7 @@
 
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
-use crate::property::{self, BlockLength, KeyLength, KeyLengths, ObjectLength};
+use crate::property::{self, BlockLength, KeyLength, KeyLengths, MessageBlockLength, ObjectLength};
 use crate::{Error, Result};
 use std::mem::MaybeUninit;
 use std::ptr::null_mut;
@@ -321,6 +321,20 @@ impl SymmetricAlgorithmKey {
         self.handle
             .get_property::<BlockLength>()
             .map(|block_size| block_size.copied() as usize)
+    }
+
+    /// Sets the message block length.
+    ///
+    /// This can be set on any key handle that has the CFB chaining mode set. By
+    /// default, it is set to 1 for 8-bit CFB. Setting it to the block
+    /// size in bytes causes full-block CFB to be used. For XTS keys it is used to
+    /// set the size, in bytes, of the XTS Data Unit (commonly 512 or 4096).
+    ///
+    /// See [here](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_MESSAGE_BLOCK_LENGTH)
+    /// for more info.
+    pub fn set_msg_block_len(&mut self, len: usize) -> Result<()> {
+        self.handle
+            .set_property::<MessageBlockLength>(&(len as u32))
     }
 
     /// Encrypts data using the symmetric key
