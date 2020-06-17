@@ -149,6 +149,16 @@ impl ChainingMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Padding to be used together with symmetric algorithms
+pub enum Padding {
+    /// Pad the data to the next block size.
+    ///
+    /// N.B. Data equal in length to the block size will be padded to the *next*
+    /// block size.
+    Block,
+}
+
 /// Symmetric algorithm
 pub struct SymmetricAlgorithm {
     handle: AlgoHandle,
@@ -337,10 +347,20 @@ impl SymmetricAlgorithmKey {
     ///     0x0C, 0xEC, 0xDB, 0xAD, 0x01, 0xB4, 0xB1, 0xDE,
     ///     0xB4, 0x4A, 0xB8, 0xA0, 0xEA, 0x0E, 0x8F, 0x31]);
     /// ```
-    pub fn encrypt(&self, iv: Option<&[u8]>, data: &[u8]) -> Result<Buffer> {
-        let mut iv_copy = iv.map(|iv| Buffer::from(iv));
-        let iv_ptr = iv_copy.as_mut().map_or(null_mut(), |iv| iv.as_mut_ptr());
-        let iv_len = iv_copy.as_ref().map_or(0, |iv| iv.len() as ULONG);
+    pub fn encrypt(
+        &self,
+        iv: Option<&mut [u8]>,
+        data: &[u8],
+        padding: Option<Padding>,
+    ) -> Result<Buffer> {
+        let (iv_ptr, iv_len) = iv
+            .map(|iv| (iv.as_mut_ptr(), iv.len() as ULONG))
+            .unwrap_or((null_mut(), 0));
+
+        let flags = match padding {
+            Some(Padding::Block) => BCRYPT_BLOCK_PADDING,
+            _ => 0,
+        };
 
         let mut encrypted_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
@@ -354,7 +374,7 @@ impl SymmetricAlgorithmKey {
                 null_mut(),
                 0,
                 encrypted_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))?;
 
             let mut output = Buffer::new(encrypted_len.assume_init() as usize);
@@ -369,7 +389,7 @@ impl SymmetricAlgorithmKey {
                 output.as_mut_ptr(),
                 output.len() as ULONG,
                 encrypted_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))
             .map(|_| output)
         }
@@ -400,10 +420,20 @@ impl SymmetricAlgorithmKey {
     ///
     /// assert_eq!(&plaintext.as_slice()[..16], "THIS_IS_THE_DATA".as_bytes());
     /// ```
-    pub fn decrypt(&self, iv: Option<&[u8]>, data: &[u8]) -> Result<Buffer> {
-        let mut iv_copy = iv.map(|iv| Buffer::from(iv));
-        let iv_ptr = iv_copy.as_mut().map_or(null_mut(), |iv| iv.as_mut_ptr());
-        let iv_len = iv_copy.as_ref().map_or(0, |iv| iv.len() as ULONG);
+    pub fn decrypt(
+        &self,
+        iv: Option<&mut [u8]>,
+        data: &[u8],
+        padding: Option<Padding>,
+    ) -> Result<Buffer> {
+        let (iv_ptr, iv_len) = iv
+            .map(|iv| (iv.as_mut_ptr(), iv.len() as ULONG))
+            .unwrap_or((null_mut(), 0));
+
+        let flags = match padding {
+            Some(Padding::Block) => BCRYPT_BLOCK_PADDING,
+            _ => 0,
+        };
 
         let mut plaintext_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
@@ -417,7 +447,7 @@ impl SymmetricAlgorithmKey {
                 null_mut(),
                 0,
                 plaintext_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))?;
 
             let mut output = Buffer::new(plaintext_len.assume_init() as usize);
@@ -432,7 +462,7 @@ impl SymmetricAlgorithmKey {
                 output.as_mut_ptr(),
                 output.len() as ULONG,
                 plaintext_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))
             .map(|_| output)
         }
@@ -510,7 +540,7 @@ mod tests {
             algo_id,
             ChainingMode::Cbc,
             &SECRET.as_bytes()[..key_size],
-            Some(&IV.as_bytes()[..block_size]),
+            Some(IV.as_bytes()[..block_size].to_vec().as_mut()),
             &DATA.as_bytes(),
             block_size,
         );
@@ -518,7 +548,7 @@ mod tests {
             algo_id,
             ChainingMode::Cfb,
             &SECRET.as_bytes()[..key_size],
-            Some(&IV.as_bytes()[..block_size]),
+            Some(IV.as_bytes()[..block_size].to_vec().as_mut()),
             &DATA.as_bytes(),
             block_size,
         );
@@ -528,14 +558,17 @@ mod tests {
         algo_id: SymmetricAlgorithmId,
         chaining_mode: ChainingMode,
         secret: &[u8],
-        iv: Option<&[u8]>,
+        iv: Option<&mut [u8]>,
         data: &[u8],
         expected_block_size: usize,
     ) {
+        let iv_cloned = || iv.as_ref().map(|x| x.to_vec());
         let algo = SymmetricAlgorithm::open(algo_id, chaining_mode).unwrap();
         let key = algo.new_key(secret).unwrap();
-        let ciphertext = key.encrypt(iv, data).unwrap();
-        let plaintext = key.decrypt(iv, ciphertext.as_slice()).unwrap();
+        let ciphertext = key.encrypt(iv_cloned().as_deref_mut(), data, None).unwrap();
+        let plaintext = key
+            .decrypt(iv_cloned().as_deref_mut(), ciphertext.as_slice(), None)
+            .unwrap();
 
         assert_eq!(data, &plaintext.as_slice()[..data.len()]);
         assert_eq!(secret.len() * 8, key.key_size().unwrap());
