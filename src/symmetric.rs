@@ -25,15 +25,18 @@
 //! The following example encrypts then decrypts a message using AES with CBC chaining mode:
 //! ```
 //! use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
+//! use win_crypto_ng::symmetric::Padding;
 //!
 //! const KEY: &'static str = "0123456789ABCDEF";
 //! const IV: &'static str = "asdfqwerasdfqwer";
 //! const DATA: &'static str = "This is a test.";
 //!
+//! let iv = IV.as_bytes().to_owned();
+//!
 //! let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
 //! let key = algo.new_key(KEY.as_bytes()).unwrap();
-//! let ciphertext = key.encrypt(Some(IV.as_bytes()), DATA.as_bytes()).unwrap();
-//! let plaintext = key.decrypt(Some(IV.as_bytes()), ciphertext.as_slice()).unwrap();
+//! let ciphertext = key.encrypt(Some(&mut iv.clone()), DATA.as_bytes(), Some(Padding::Block)).unwrap();
+//! let plaintext = key.decrypt(Some(&mut iv.clone()), ciphertext.as_slice(), Some(Padding::Block)).unwrap();
 //!
 //! assert_eq!(std::str::from_utf8(&plaintext.as_slice()[..DATA.len()]).unwrap(), DATA);
 //! ```
@@ -335,11 +338,12 @@ impl SymmetricAlgorithmKey {
     ///
     /// ```
     /// # use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
+    /// # use win_crypto_ng::symmetric::Padding;
     /// # let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
     /// let key = algo.new_key("0123456789ABCDEF".as_bytes()).unwrap();
-    /// let iv = "_THIS_IS_THE_IV_".as_bytes();
+    /// let mut iv = b"_THIS_IS_THE_IV_".to_vec();
     /// let plaintext = "THIS_IS_THE_DATA".as_bytes();
-    /// let ciphertext = key.encrypt(Some(iv), plaintext).unwrap();
+    /// let ciphertext = key.encrypt(Some(&mut iv), plaintext, Some(Padding::Block)).unwrap();
     ///
     /// assert_eq!(ciphertext.as_slice(), [
     ///     0xE4, 0xD9, 0x90, 0x64, 0xA6, 0xA6, 0x5F, 0x7E,
@@ -407,16 +411,17 @@ impl SymmetricAlgorithmKey {
     ///
     /// ```
     /// # use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
+    /// # use win_crypto_ng::symmetric::Padding;
     /// # let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
     /// let key = algo.new_key("0123456789ABCDEF".as_bytes()).unwrap();
-    /// let iv = "_THIS_IS_THE_IV_".as_bytes();
+    /// let mut iv = b"_THIS_IS_THE_IV_".to_vec();
     /// let ciphertext = [
     ///     0xE4, 0xD9, 0x90, 0x64, 0xA6, 0xA6, 0x5F, 0x7E,
     ///     0x70, 0xDB, 0xF9, 0xDD, 0xE7, 0x0D, 0x6F, 0x6A,
     ///     0x0C, 0xEC, 0xDB, 0xAD, 0x01, 0xB4, 0xB1, 0xDE,
     ///     0xB4, 0x4A, 0xB8, 0xA0, 0xEA, 0x0E, 0x8F, 0x31
     /// ];
-    /// let plaintext = key.decrypt(Some(iv), &ciphertext).unwrap();
+    /// let plaintext = key.decrypt(Some(&mut iv), &ciphertext, Some(Padding::Block)).unwrap();
     ///
     /// assert_eq!(&plaintext.as_slice()[..16], "THIS_IS_THE_DATA".as_bytes());
     /// ```
@@ -565,9 +570,15 @@ mod tests {
         let iv_cloned = || iv.as_ref().map(|x| x.to_vec());
         let algo = SymmetricAlgorithm::open(algo_id, chaining_mode).unwrap();
         let key = algo.new_key(secret).unwrap();
-        let ciphertext = key.encrypt(iv_cloned().as_deref_mut(), data, None).unwrap();
+        let ciphertext = key
+            .encrypt(iv_cloned().as_mut().map(|x| x.as_mut()), data, None)
+            .unwrap();
         let plaintext = key
-            .decrypt(iv_cloned().as_deref_mut(), ciphertext.as_slice(), None)
+            .decrypt(
+                iv_cloned().as_mut().map(|x| x.as_mut()),
+                ciphertext.as_slice(),
+                None,
+            )
             .unwrap();
 
         assert_eq!(data, &plaintext.as_slice()[..data.len()]);
