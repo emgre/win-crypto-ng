@@ -1,3 +1,12 @@
+#![allow(
+    // We're running Clippy across 1.37, stable, beta and nightly, sometimes the
+    // older versions don't recognize lints that are warned against in the newer
+    // versions
+    clippy::unknown_clippy_lints,
+    // Requires a nightly-only feature: https://github.com/rust-lang/rust/issues/54883
+    clippy::unnested_or_patterns,
+)]
+
 use doc_comment::doctest;
 use winapi::shared::ntdef::NTSTATUS;
 use winapi::shared::ntstatus;
