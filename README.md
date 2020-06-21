@@ -40,16 +40,18 @@ Windows, you already accepted to trust these primitives.
 ### Symmetric encryption
 
 ```rust
-use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
+use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId, Padding};
 
 const KEY: &'static str = "0123456789ABCDEF";
 const IV: &'static str = "asdfqwerasdfqwer";
 const DATA: &'static str = "This is a test.";
 
+let iv = IV.as_bytes().to_vec();
+
 let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
 let key = algo.new_key(KEY.as_bytes()).unwrap();
-let ciphertext = key.encrypt(Some(IV.as_bytes()), DATA.as_bytes()).unwrap();
-let plaintext = key.decrypt(Some(IV.as_bytes()), ciphertext.as_slice()).unwrap();
+let ciphertext = key.encrypt(Some(&mut iv.clone()), DATA.as_bytes(), Some(Padding::Block)).unwrap();
+let plaintext = key.decrypt(Some(&mut iv.clone()), ciphertext.as_slice(), Some(Padding::Block)).unwrap();
 
 assert_eq!(std::str::from_utf8(&plaintext.as_slice()[..DATA.len()]).unwrap(), DATA);
 ```
