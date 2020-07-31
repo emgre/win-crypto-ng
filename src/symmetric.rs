@@ -25,15 +25,18 @@
 //! The following example encrypts then decrypts a message using AES with CBC chaining mode:
 //! ```
 //! use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
+//! use win_crypto_ng::symmetric::Padding;
 //!
 //! const KEY: &'static str = "0123456789ABCDEF";
 //! const IV: &'static str = "asdfqwerasdfqwer";
 //! const DATA: &'static str = "This is a test.";
 //!
+//! let iv = IV.as_bytes().to_owned();
+//!
 //! let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
 //! let key = algo.new_key(KEY.as_bytes()).unwrap();
-//! let ciphertext = key.encrypt(Some(IV.as_bytes()), DATA.as_bytes()).unwrap();
-//! let plaintext = key.decrypt(Some(IV.as_bytes()), ciphertext.as_slice()).unwrap();
+//! let ciphertext = key.encrypt(Some(&mut iv.clone()), DATA.as_bytes(), Some(Padding::Block)).unwrap();
+//! let plaintext = key.decrypt(Some(&mut iv.clone()), ciphertext.as_slice(), Some(Padding::Block)).unwrap();
 //!
 //! assert_eq!(std::str::from_utf8(&plaintext.as_slice()[..DATA.len()]).unwrap(), DATA);
 //! ```
@@ -44,7 +47,7 @@
 
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
-use crate::property::{self, BlockLength, KeyLength, KeyLengths, ObjectLength};
+use crate::property::{self, BlockLength, KeyLength, KeyLengths, MessageBlockLength, ObjectLength};
 use crate::{Error, Result};
 use std::mem::MaybeUninit;
 use std::ptr::null_mut;
@@ -144,6 +147,16 @@ impl ChainingMode {
             //Self::Gcm => BCRYPT_CHAIN_MODE_GCM,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Padding to be used together with symmetric algorithms
+pub enum Padding {
+    /// Pad the data to the next block size.
+    ///
+    /// N.B. Data equal in length to the block size will be padded to the *next*
+    /// block size.
+    Block,
 }
 
 /// Symmetric algorithm
@@ -323,6 +336,20 @@ impl SymmetricAlgorithmKey {
             .map(|block_size| block_size.copied() as usize)
     }
 
+    /// Sets the message block length.
+    ///
+    /// This can be set on any key handle that has the CFB chaining mode set. By
+    /// default, it is set to 1 for 8-bit CFB. Setting it to the block
+    /// size in bytes causes full-block CFB to be used. For XTS keys it is used to
+    /// set the size, in bytes, of the XTS Data Unit (commonly 512 or 4096).
+    ///
+    /// See [here](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_MESSAGE_BLOCK_LENGTH)
+    /// for more info.
+    pub fn set_msg_block_len(&mut self, len: usize) -> Result<()> {
+        self.handle
+            .set_property::<MessageBlockLength>(&(len as u32))
+    }
+
     /// Encrypts data using the symmetric key
     ///
     /// The IV is not needed for [`ChainingMode::Ecb`], so `None` should be used
@@ -339,11 +366,12 @@ impl SymmetricAlgorithmKey {
     ///
     /// ```
     /// # use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
+    /// # use win_crypto_ng::symmetric::Padding;
     /// # let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
     /// let key = algo.new_key("0123456789ABCDEF".as_bytes()).unwrap();
-    /// let iv = "_THIS_IS_THE_IV_".as_bytes();
+    /// let mut iv = b"_THIS_IS_THE_IV_".to_vec();
     /// let plaintext = "THIS_IS_THE_DATA".as_bytes();
-    /// let ciphertext = key.encrypt(Some(iv), plaintext).unwrap();
+    /// let ciphertext = key.encrypt(Some(&mut iv), plaintext, Some(Padding::Block)).unwrap();
     ///
     /// assert_eq!(ciphertext.as_slice(), [
     ///     0xE4, 0xD9, 0x90, 0x64, 0xA6, 0xA6, 0x5F, 0x7E,
@@ -351,10 +379,20 @@ impl SymmetricAlgorithmKey {
     ///     0x0C, 0xEC, 0xDB, 0xAD, 0x01, 0xB4, 0xB1, 0xDE,
     ///     0xB4, 0x4A, 0xB8, 0xA0, 0xEA, 0x0E, 0x8F, 0x31]);
     /// ```
-    pub fn encrypt(&self, iv: Option<&[u8]>, data: &[u8]) -> Result<Buffer> {
-        let mut iv_copy = iv.map(|iv| Buffer::from(iv));
-        let iv_ptr = iv_copy.as_mut().map_or(null_mut(), |iv| iv.as_mut_ptr());
-        let iv_len = iv_copy.as_ref().map_or(0, |iv| iv.len() as ULONG);
+    pub fn encrypt(
+        &self,
+        iv: Option<&mut [u8]>,
+        data: &[u8],
+        padding: Option<Padding>,
+    ) -> Result<Buffer> {
+        let (iv_ptr, iv_len) = iv
+            .map(|iv| (iv.as_mut_ptr(), iv.len() as ULONG))
+            .unwrap_or((null_mut(), 0));
+
+        let flags = match padding {
+            Some(Padding::Block) => BCRYPT_BLOCK_PADDING,
+            _ => 0,
+        };
 
         let mut encrypted_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
@@ -368,7 +406,7 @@ impl SymmetricAlgorithmKey {
                 null_mut(),
                 0,
                 encrypted_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))?;
 
             let mut output = Buffer::new(encrypted_len.assume_init() as usize);
@@ -383,7 +421,7 @@ impl SymmetricAlgorithmKey {
                 output.as_mut_ptr(),
                 output.len() as ULONG,
                 encrypted_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))
             .map(|_| output)
         }
@@ -401,23 +439,34 @@ impl SymmetricAlgorithmKey {
     ///
     /// ```
     /// # use win_crypto_ng::symmetric::{ChainingMode, SymmetricAlgorithm, SymmetricAlgorithmId};
+    /// # use win_crypto_ng::symmetric::Padding;
     /// # let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Cbc).unwrap();
     /// let key = algo.new_key("0123456789ABCDEF".as_bytes()).unwrap();
-    /// let iv = "_THIS_IS_THE_IV_".as_bytes();
+    /// let mut iv = b"_THIS_IS_THE_IV_".to_vec();
     /// let ciphertext = [
     ///     0xE4, 0xD9, 0x90, 0x64, 0xA6, 0xA6, 0x5F, 0x7E,
     ///     0x70, 0xDB, 0xF9, 0xDD, 0xE7, 0x0D, 0x6F, 0x6A,
     ///     0x0C, 0xEC, 0xDB, 0xAD, 0x01, 0xB4, 0xB1, 0xDE,
     ///     0xB4, 0x4A, 0xB8, 0xA0, 0xEA, 0x0E, 0x8F, 0x31
     /// ];
-    /// let plaintext = key.decrypt(Some(iv), &ciphertext).unwrap();
+    /// let plaintext = key.decrypt(Some(&mut iv), &ciphertext, Some(Padding::Block)).unwrap();
     ///
     /// assert_eq!(&plaintext.as_slice()[..16], "THIS_IS_THE_DATA".as_bytes());
     /// ```
-    pub fn decrypt(&self, iv: Option<&[u8]>, data: &[u8]) -> Result<Buffer> {
-        let mut iv_copy = iv.map(|iv| Buffer::from(iv));
-        let iv_ptr = iv_copy.as_mut().map_or(null_mut(), |iv| iv.as_mut_ptr());
-        let iv_len = iv_copy.as_ref().map_or(0, |iv| iv.len() as ULONG);
+    pub fn decrypt(
+        &self,
+        iv: Option<&mut [u8]>,
+        data: &[u8],
+        padding: Option<Padding>,
+    ) -> Result<Buffer> {
+        let (iv_ptr, iv_len) = iv
+            .map(|iv| (iv.as_mut_ptr(), iv.len() as ULONG))
+            .unwrap_or((null_mut(), 0));
+
+        let flags = match padding {
+            Some(Padding::Block) => BCRYPT_BLOCK_PADDING,
+            _ => 0,
+        };
 
         let mut plaintext_len = MaybeUninit::<ULONG>::uninit();
         unsafe {
@@ -431,7 +480,7 @@ impl SymmetricAlgorithmKey {
                 null_mut(),
                 0,
                 plaintext_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))?;
 
             let mut output = Buffer::new(plaintext_len.assume_init() as usize);
@@ -446,7 +495,7 @@ impl SymmetricAlgorithmKey {
                 output.as_mut_ptr(),
                 output.len() as ULONG,
                 plaintext_len.as_mut_ptr(),
-                BCRYPT_BLOCK_PADDING,
+                flags,
             ))
             .map(|_| output)
         }
@@ -524,7 +573,7 @@ mod tests {
             algo_id,
             ChainingMode::Cbc,
             &SECRET.as_bytes()[..key_size],
-            Some(&IV.as_bytes()[..block_size]),
+            Some(IV.as_bytes()[..block_size].to_vec().as_mut()),
             &DATA.as_bytes(),
             block_size,
         );
@@ -532,7 +581,7 @@ mod tests {
             algo_id,
             ChainingMode::Cfb,
             &SECRET.as_bytes()[..key_size],
-            Some(&IV.as_bytes()[..block_size]),
+            Some(IV.as_bytes()[..block_size].to_vec().as_mut()),
             &DATA.as_bytes(),
             block_size,
         );
@@ -542,14 +591,23 @@ mod tests {
         algo_id: SymmetricAlgorithmId,
         chaining_mode: ChainingMode,
         secret: &[u8],
-        iv: Option<&[u8]>,
+        iv: Option<&mut [u8]>,
         data: &[u8],
         expected_block_size: usize,
     ) {
+        let iv_cloned = || iv.as_ref().map(|x| x.to_vec());
         let algo = SymmetricAlgorithm::open(algo_id, chaining_mode).unwrap();
         let key = algo.new_key(secret).unwrap();
-        let ciphertext = key.encrypt(iv, data).unwrap();
-        let plaintext = key.decrypt(iv, ciphertext.as_slice()).unwrap();
+        let ciphertext = key
+            .encrypt(iv_cloned().as_mut().map(|x| x.as_mut()), data, None)
+            .unwrap();
+        let plaintext = key
+            .decrypt(
+                iv_cloned().as_mut().map(|x| x.as_mut()),
+                ciphertext.as_slice(),
+                None,
+            )
+            .unwrap();
 
         assert_eq!(data, &plaintext.as_slice()[..data.len()]);
         assert_eq!(secret.len() * 8, key.key_size().unwrap());

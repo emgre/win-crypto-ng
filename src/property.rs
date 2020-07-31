@@ -94,6 +94,20 @@ impl Property for KeyLengths {
     type Value = bcrypt::BCRYPT_KEY_LENGTHS_STRUCT;
 }
 
+/// [**BCRYPT_MESSAGE_BLOCK_LENGTH**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_MESSAGE_BLOCK_LENGTH)
+///
+/// `L"MessageBlockLength"`
+///
+/// This can be set on any key handle that has the CFB chaining mode set. By
+/// default, this property is set to 1 for 8-bit CFB. Setting it to the block
+/// size in bytes causes full-block CFB to be used. For XTS keys it is used to
+/// set the size, in bytes, of the XTS Data Unit (commonly 512 or 4096).
+pub enum MessageBlockLength {}
+impl Property for MessageBlockLength {
+    const IDENTIFIER: &'static str = bcrypt::BCRYPT_MESSAGE_BLOCK_LENGTH;
+    type Value = DWORD;
+}
+
 /// [**BCRYPT_OBJECT_LENGTH**](https://docs.microsoft.com/windows/win32/seccng/cng-property-identifiers#BCRYPT_OBJECT_LENGTH)
 ///
 /// `L"ObjectLength"`
