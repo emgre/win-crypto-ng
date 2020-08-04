@@ -1,31 +1,23 @@
 //! Type-safe builders to generate various asymmetric keys.
 
-use crate::handle::{Handle, KeyHandle};
-use crate::helpers::{Blob, Pod, WideCString};
-use crate::key::BlobType;
-use crate::key::ErasedKeyBlob;
-use crate::{Error, Result};
+use crate::Result;
 use std::marker::PhantomData;
-use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
-use winapi::shared::ntdef::ULONG;
 
-use super::ecc::Curve;
-use super::{Algorithm, AsymmetricAlgorithm, AsymmetricAlgorithmId, AsymmetricKey, Private};
-use super::{Dh, Dsa, Ecdh, Ecdsa, Rsa};
+use super::{Algorithm, AsymmetricAlgorithm, AsymmetricKey, KeyPair, Private};
 
-impl AsymmetricKey {
-    pub fn builder<B: Algorithm>(algorithm: B) -> Builder<B> {
-        Builder { algorithm }
+impl<A: Algorithm> AsymmetricAlgorithm<A> {
+    pub fn builder(&self) -> Builder<A> {
+        Builder { algorithm: &self }
     }
 }
 
 /// Main builder type used to generate asymmetric key pairs.
-pub struct Builder<A: Algorithm> {
-    algorithm: A,
+pub struct Builder<'a, A: Algorithm> {
+    algorithm: &'a AsymmetricAlgorithm<A>,
 }
 
-impl<A: Algorithm + NotNeedsKeySize> Builder<A> {
+impl<A: Algorithm + NotNeedsKeySize> Builder<'_, A> {
     pub fn build(self) -> Result<AsymmetricKey<A, Private>> {
         BuilderWithParams {
             key_bits: self.algorithm.id().key_bits().unwrap_or(0),
@@ -36,8 +28,8 @@ impl<A: Algorithm + NotNeedsKeySize> Builder<A> {
     }
 }
 
-impl<A: Algorithm + NeedsKeySize> Builder<A> {
-    pub fn key_bits(self, key_bits: u32) -> BuilderWithKeyBits<A> {
+impl<'a, A: Algorithm + NeedsKeySize> Builder<'a, A> {
+    pub fn key_bits(self, key_bits: u32) -> BuilderWithKeyBits<'a, A> {
         BuilderWithKeyBits {
             algorithm: self.algorithm,
             key_bits,
@@ -45,6 +37,60 @@ impl<A: Algorithm + NeedsKeySize> Builder<A> {
         }
     }
 }
+
+/// Marker trait for key constraint such as key size.
+pub trait KeyConstraint {}
+/// No constraint for keys. Used by default.
+pub struct NoConstraint {}
+impl KeyConstraint for NoConstraint {}
+/// Key size in bits has to be in the [512, 1024] range.
+pub struct KeyBitsGte512Lte1024 {}
+impl KeyConstraint for KeyBitsGte512Lte1024 {}
+/// Key size in bits has to be in the (1024, 3072] range.
+pub struct KeyBitsGt1024Lte3072 {}
+impl KeyConstraint for KeyBitsGt1024Lte3072 {}
+
+/// Builder type with key length provided in bits.
+pub struct BuilderWithKeyBits<'a, A: Algorithm, C: KeyConstraint = NoConstraint> {
+    pub(crate) algorithm: &'a AsymmetricAlgorithm<A>,
+    pub(crate) key_bits: u32,
+    pub(crate) key_constraint: PhantomData<C>,
+}
+
+/// Marker trait implemented for algorithms that do not require explicitly
+/// providing key size in bits (and, by extension, other parameters).
+pub trait NotNeedsKeySize: Algorithm {}
+
+/// Marker trait implemented for algorithms that require explicitly providing
+/// key size in bits to be generated.
+pub trait NeedsKeySize: Algorithm {}
+
+pub trait BuilderParams {
+    fn set_param(&self, _handle: BCRYPT_HANDLE, _key_bits: u32) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl BuilderParams for () {}
+
+pub struct BuilderWithParams<'a, A: Algorithm, Params: BuilderParams = ()> {
+    pub(crate) algorithm: &'a AsymmetricAlgorithm<A>,
+    pub(crate) key_bits: u32,
+    pub(crate) params: Params,
+}
+
+impl<A: Algorithm, P: BuilderParams> BuilderWithParams<'_, A, P> {
+    pub fn build(self) -> Result<AsymmetricKey<A, Private>> {
+        let pair = KeyPair::generate(&self.algorithm, self.key_bits)?;
+        self.params.set_param(pair.handle, self.key_bits)?;
+
+        pair.finalize()
+            .map(|pair| AsymmetricKey::new(pair.0))
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+mod old {
 
 impl Builder<Dsa> {
     pub fn key_bits_in_512_1024(
@@ -80,34 +126,11 @@ impl Builder<Dsa> {
     }
 }
 
-/// Marker trait for key constraint such as key size.
-pub trait KeyConstraint {}
-/// No constraint for keys. Used by default.
-pub struct NoConstraint {}
-impl KeyConstraint for NoConstraint {}
-/// Key size in bits has to be in the [512, 1024] range.
-pub struct KeyBitsGte512Lte1024 {}
-impl KeyConstraint for KeyBitsGte512Lte1024 {}
-/// Key size in bits has to be in the (1024, 3072] range.
-pub struct KeyBitsGt1024Lte3072 {}
-impl KeyConstraint for KeyBitsGt1024Lte3072 {}
 
-/// Builder type with key length provided in bits.
-pub struct BuilderWithKeyBits<A: Algorithm, C: KeyConstraint = NoConstraint> {
-    algorithm: A,
-    key_bits: u32,
-    key_constraint: PhantomData<C>,
-}
-
-/// Marker trait implemented for algorithms that do not require explicitly
-/// providing key size in bits (and, by extension, other parameters).
-pub trait NotNeedsKeySize: Algorithm {}
 impl NotNeedsKeySize for AsymmetricAlgorithmId {}
 impl<C: Curve> NotNeedsKeySize for Ecdh<C> {}
 impl<C: Curve> NotNeedsKeySize for Ecdsa<C> {}
-/// Marker trait implemented for algorithms that require explicitly providing
-/// key size in bits to be generated.
-pub trait NeedsKeySize: Algorithm {}
+
 impl NeedsKeySize for AsymmetricAlgorithmId {}
 impl NeedsKeySize for Dh {}
 impl NeedsKeySize for Dsa {}
@@ -205,12 +228,6 @@ fn set_property(handle: BCRYPT_HANDLE, property: &str, value: &[u8]) -> Result<(
     Ok(())
 }
 
-pub trait BuilderParams {
-    fn set_param(&self, _handle: BCRYPT_HANDLE, _key_bits: u32) -> Result<()> {
-        Ok(())
-    }
-}
-impl BuilderParams for () {}
 impl BuilderParams for BuilderOptions {
     fn set_param(&self, handle: BCRYPT_HANDLE, key_bits: u32) -> Result<()> {
         let (property, blob) = match self {
@@ -256,25 +273,6 @@ impl BuilderParams for DsaParamsV2 {
             BCRYPT_DSA_PARAMETERS,
             self.to_blob(key_bits).as_bytes(),
         )
-    }
-}
-
-pub struct BuilderWithParams<A: Algorithm, Params: BuilderParams = ()> {
-    algorithm: A,
-    key_bits: u32,
-    params: Params,
-}
-
-impl<A: Algorithm, P: BuilderParams> BuilderWithParams<A, P> {
-    pub fn build(self) -> Result<AsymmetricKey<A, Private>> {
-        let id = self.algorithm.id();
-
-        let provider = AsymmetricAlgorithm::open(id)?;
-        let pair = KeyPair::generate(&provider, self.key_bits)?;
-        self.params.set_param(pair.handle, self.key_bits)?;
-
-        pair.finalize()
-            .map(|pair| AsymmetricKey(pair.0, self.algorithm, PhantomData))
     }
 }
 
@@ -434,99 +432,6 @@ impl BuilderWithKeyBits<Dsa> {
     }
 }
 
-/// Type-erased version of [`AsymmetricKey`]
-pub(crate) struct KeyPair(pub(crate) KeyHandle);
-
-struct KeyPairBuilder<'a> {
-    _provider: &'a AsymmetricAlgorithm,
-    handle: BCRYPT_KEY_HANDLE,
-}
-
-impl KeyPair {
-    fn generate(provider: &AsymmetricAlgorithm, length: u32) -> Result<KeyPairBuilder> {
-        let mut handle: BCRYPT_KEY_HANDLE = null_mut();
-
-        crate::Error::check(unsafe {
-            BCryptGenerateKeyPair(provider.handle.as_ptr(), &mut handle, length as ULONG, 0)
-        })?;
-
-        Ok(KeyPairBuilder {
-            _provider: provider,
-            handle,
-        })
-    }
-
-    pub fn import(
-        provider: &AsymmetricAlgorithm,
-        key_data: &Blob<ErasedKeyBlob>,
-        no_validate_public: bool,
-    ) -> Result<Self> {
-        let blob_type = key_data.blob_type().ok_or(Error::InvalidParameter)?;
-        let property = WideCString::from(blob_type.as_value());
-
-        let mut handle = KeyHandle::default();
-        Error::check(unsafe {
-            BCryptImportKeyPair(
-                provider.handle.as_ptr(),
-                null_mut(),
-                property.as_ptr(),
-                handle.as_mut_ptr(),
-                key_data.as_bytes().as_ptr() as *mut _,
-                key_data.as_bytes().len() as u32,
-                if no_validate_public {
-                    BCRYPT_NO_KEY_VALIDATION
-                } else {
-                    0
-                },
-            )
-        })
-        .map(|_| KeyPair(handle))
-    }
-
-    pub fn export(handle: BCRYPT_KEY_HANDLE, kind: BlobType) -> Result<Box<Blob<ErasedKeyBlob>>> {
-        let property = WideCString::from(kind.as_value());
-
-        let mut bytes: ULONG = 0;
-        unsafe {
-            Error::check(BCryptExportKey(
-                handle,
-                null_mut(),
-                property.as_ptr(),
-                null_mut(),
-                0,
-                &mut bytes,
-                0,
-            ))?;
-        }
-        let mut blob = vec![0u8; bytes as usize].into_boxed_slice();
-        eprintln!("Asked to allocate {} bytes", bytes);
-
-        unsafe {
-            Error::check(BCryptExportKey(
-                handle,
-                null_mut(),
-                property.as_ptr(),
-                blob.as_mut_ptr(),
-                bytes,
-                &mut bytes,
-                0,
-            ))?;
-        }
-
-        Ok(Blob::<ErasedKeyBlob>::from_boxed(blob))
-    }
-}
-
-impl KeyPairBuilder<'_> {
-    fn finalize(self) -> Result<KeyPair> {
-        Error::check(unsafe { BCryptFinalizeKeyPair(self.handle, 0) }).map(|_| {
-            KeyPair(KeyHandle {
-                handle: self.handle,
-            })
-        })
-    }
-}
-
 use crate::blob;
 
 unsafe impl Pod for BCRYPT_DH_PARAMETER_HEADER {}
@@ -621,4 +526,6 @@ mod tests {
 
         Ok(())
     }
+}
+
 }

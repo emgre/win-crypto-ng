@@ -14,7 +14,7 @@ use winapi::shared::ntstatus;
 use std::fmt;
 use std::num::NonZeroU32;
 
-pub mod agreement;
+//pub mod agreement;
 pub mod asymmetric;
 pub mod buffer;
 mod handle;
@@ -22,7 +22,7 @@ pub mod hash;
 pub mod key;
 pub mod property;
 pub mod random;
-pub mod signature;
+//pub mod signature;
 pub mod symmetric;
 
 pub mod helpers;

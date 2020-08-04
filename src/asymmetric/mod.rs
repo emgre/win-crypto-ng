@@ -7,23 +7,23 @@
 //!
 //! > **NOTE**: This is currently a stub and should be expanded.
 
-use crate::handle::{AlgoHandle, KeyHandle};
+use crate::handle::{AlgoHandle, Handle, KeyHandle};
 use crate::helpers::blob::{Blob, BlobLayout};
 use crate::helpers::WideCString;
-use crate::key::{BlobType, ErasedKeyBlob};
-use crate::property::{Access, AlgorithmName, EccCurveName};
-use crate::Result;
+use crate::key::{BlobType, ErasedKeyBlob, KeyBlob};
+use crate::{Error, Result};
 use std::borrow::Borrow;
 use std::convert::TryFrom;
 use std::marker::PhantomData;
+use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
+use winapi::shared::ntdef::ULONG;
 
-use builder::KeyPair;
 use ecc::{Curve, NamedCurve};
-use ecc::{Curve25519, NistP256, NistP384, NistP521};
 
 pub mod builder;
 pub mod ecc;
+pub mod rsa;
 
 /// Asymmetric algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -113,11 +113,207 @@ impl<'a> TryFrom<&'a str> for AsymmetricAlgorithmId {
     }
 }
 
-/// Asymmetric algorithm
-pub struct AsymmetricAlgorithm {
-    pub(crate) handle: AlgoHandle,
+pub trait Algorithm {
+    fn id(&self) -> AsymmetricAlgorithmId;
 }
 
+/// Asymmetric algorithm
+pub struct AsymmetricAlgorithm<A: Algorithm> {
+    handle: AlgoHandle,
+    algorithm: A,
+}
+
+impl<A: Algorithm> AsymmetricAlgorithm<A> {
+    fn new(handle: AlgoHandle, algorithm: A) -> AsymmetricAlgorithm<A> {
+        Self {
+            handle,
+            algorithm,
+        }
+    }
+
+    pub fn id(&self) -> AsymmetricAlgorithmId {
+        self.algorithm.id()
+    }
+}
+
+pub struct AsymmetricKey<A: Algorithm, P: Parts = Public>(
+    KeyHandle,
+    PhantomData<A>,
+    PhantomData<P>,
+);
+
+impl<A: Algorithm, P: Parts> AsymmetricKey<A, P> {
+    fn new(handle: KeyHandle) -> Self {
+        Self(
+            handle,
+            PhantomData,
+            PhantomData,
+        )
+    }
+
+    pub fn into_handle(self) -> KeyHandle {
+        self.0
+    }
+}
+
+pub trait Parts {}
+
+pub struct Private {}
+impl Parts for Private {}
+
+pub struct Public {}
+impl Parts for Public {}
+
+impl<A: Algorithm> AsymmetricKey<A, Private> {
+    pub fn as_public(&self) -> &AsymmetricKey<A, Public> {
+        // NOTE: This assumes that Private is always a key pair
+        unsafe { &*(self as *const _ as *const AsymmetricKey<A, Public>) }
+    }
+}
+
+pub trait Import<'a, A: Algorithm, P: Parts> {
+    type Blob: AsRef<Blob<ErasedKeyBlob>> + 'a;
+    fn import(
+        provider: &AsymmetricAlgorithm<A>,
+        blob: Self::Blob,
+    ) -> Result<AsymmetricKey<A, P>> {
+        KeyPair::import(provider, blob.as_ref(), true)
+            .map(|pair| AsymmetricKey::new(pair.0))
+    }
+}
+
+/// Attempts to export the key to a given blob type.
+///
+/// # Example
+/// ```
+/// use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
+/// use win_crypto_ng::asymmetric::{Algorithm, Private, AsymmetricKey};
+/// use win_crypto_ng::asymmetric::rsa::Rsa;
+/// use win_crypto_ng::asymmetric::Export;
+///
+/// let algo = Rsa::open().unwrap();
+/// let pair = algo.builder().key_bits(1024).build().unwrap();
+/// let blob = pair.as_public().export().unwrap();
+///
+/// let public = blob;
+/// let pub_exp = public.pub_exp();
+/// let modulus = public.modulus();
+///
+/// let private = pair.export().unwrap();
+/// assert_eq!(pub_exp, private.pub_exp());
+/// assert_eq!(modulus, private.modulus());
+/// ```
+pub trait Export<A: Algorithm, P: Parts>: Borrow<AsymmetricKey<A, P>> {
+    type Blob: KeyBlob + BlobLayout;
+
+    #[doc(hidden)]
+    fn blob_type(&self) -> BlobType;
+
+    fn export(&self) -> Result<Box<Blob<Self::Blob>>> {
+        let key = self.borrow();
+        let blob_type = self.blob_type();
+
+        let blob = KeyPair::export(key.0.handle, blob_type)?;
+        Ok(blob.try_into().map_err(|_| crate::Error::BadData)?)
+    }
+}
+
+/// Generated key pair
+struct KeyPair(KeyHandle);
+
+/// Key pair generator
+struct KeyPairBuilder<'a, A: Algorithm> {
+    _provider: &'a AsymmetricAlgorithm<A>,
+    handle: BCRYPT_KEY_HANDLE,
+}
+
+impl KeyPair {
+    fn generate<A: Algorithm>(provider: &AsymmetricAlgorithm<A>, length: u32) -> Result<KeyPairBuilder<A>> {
+        let mut handle: BCRYPT_KEY_HANDLE = null_mut();
+
+        crate::Error::check(unsafe {
+            BCryptGenerateKeyPair(provider.handle.as_ptr(), &mut handle, length as ULONG, 0)
+        })?;
+
+        Ok(KeyPairBuilder {
+            _provider: provider,
+            handle,
+        })
+    }
+
+    pub fn import<A: Algorithm>(
+        provider: &AsymmetricAlgorithm<A>,
+        key_data: &Blob<ErasedKeyBlob>,
+        no_validate_public: bool,
+    ) -> Result<Self> {
+        let blob_type = key_data.blob_type().ok_or(Error::InvalidParameter)?;
+        let property = WideCString::from(blob_type.as_value());
+
+        let mut handle = KeyHandle::default();
+        Error::check(unsafe {
+            BCryptImportKeyPair(
+                provider.handle.as_ptr(),
+                null_mut(),
+                property.as_ptr(),
+                handle.as_mut_ptr(),
+                key_data.as_bytes().as_ptr() as *mut _,
+                key_data.as_bytes().len() as u32,
+                if no_validate_public {
+                    BCRYPT_NO_KEY_VALIDATION
+                } else {
+                    0
+                },
+            )
+        })
+        .map(|_| KeyPair(handle))
+    }
+
+    pub fn export(handle: BCRYPT_KEY_HANDLE, kind: BlobType) -> Result<Box<Blob<ErasedKeyBlob>>> {
+        let property = WideCString::from(kind.as_value());
+
+        let mut bytes: ULONG = 0;
+        unsafe {
+            Error::check(BCryptExportKey(
+                handle,
+                null_mut(),
+                property.as_ptr(),
+                null_mut(),
+                0,
+                &mut bytes,
+                0,
+            ))?;
+        }
+        let mut blob = vec![0u8; bytes as usize].into_boxed_slice();
+        eprintln!("Asked to allocate {} bytes", bytes);
+
+        unsafe {
+            Error::check(BCryptExportKey(
+                handle,
+                null_mut(),
+                property.as_ptr(),
+                blob.as_mut_ptr(),
+                bytes,
+                &mut bytes,
+                0,
+            ))?;
+        }
+
+        Ok(Blob::<ErasedKeyBlob>::from_boxed(blob))
+    }
+}
+
+impl<A: Algorithm> KeyPairBuilder<'_, A> {
+    fn finalize(self) -> Result<KeyPair> {
+        Error::check(unsafe { BCryptFinalizeKeyPair(self.handle, 0) }).map(|_| {
+            KeyPair(KeyHandle {
+                handle: self.handle,
+            })
+        })
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+mod old {
 impl AsymmetricAlgorithm {
     /// Open an asymmetric algorithm provider
     ///
@@ -186,11 +382,6 @@ impl<C: Curve> Algorithm for Ecdh<C> {
     }
 }
 
-/// Marker trait for an asymmetric algorithm.
-pub trait Algorithm {
-    fn id(&self) -> AsymmetricAlgorithmId;
-}
-
 macro_rules! algo_struct {
     (pub struct $ident: ident, $algo: expr) => {
         pub struct $ident;
@@ -206,41 +397,6 @@ macro_rules! algo_struct {
 algo_struct!(pub struct Dh, AsymmetricAlgorithmId::Dh);
 algo_struct!(pub struct Dsa, AsymmetricAlgorithmId::Dsa);
 algo_struct!(pub struct Rsa, AsymmetricAlgorithmId::Rsa);
-
-pub trait Parts {}
-pub struct Private {}
-impl Parts for Private {}
-pub struct Public {}
-impl Parts for Public {}
-
-impl Algorithm for AsymmetricAlgorithmId {
-    fn id(&self) -> AsymmetricAlgorithmId {
-        *self
-    }
-}
-
-pub struct AsymmetricKey<A: Algorithm = AsymmetricAlgorithmId, P: Parts = Public>(
-    pub(crate) KeyHandle,
-    A,
-    PhantomData<P>,
-);
-
-impl<A: Algorithm, P: Parts> AsymmetricKey<A, P> {
-    pub fn id(&self) -> AsymmetricAlgorithmId {
-        Algorithm::id(&self.1)
-    }
-
-    pub fn into_handle(self) -> KeyHandle {
-        self.0
-    }
-}
-
-impl<A: Algorithm> AsymmetricKey<A, Private> {
-    pub fn as_public(&self) -> &AsymmetricKey<A, Public> {
-        // NOTE: This assumes that Private is always a key pair
-        unsafe { &*(self as *const _ as *const AsymmetricKey<A, Public>) }
-    }
-}
 
 impl<A: Algorithm, P: Parts> From<(KeyHandle, A)> for AsymmetricKey<A, P> {
     fn from(handle: (KeyHandle, A)) -> Self {
@@ -272,18 +428,6 @@ impl AsymmetricKey<Rsa, Private> {
         Ok(KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
             .try_into()
             .map_err(|_| crate::Error::BadData)?)
-    }
-}
-
-pub trait Import<'a, A: Algorithm, P: Parts> {
-    type Blob: AsRef<Blob<ErasedKeyBlob>> + 'a;
-    fn import(
-        algo: A,
-        provider: &AsymmetricAlgorithm,
-        blob: Self::Blob,
-    ) -> Result<AsymmetricKey<A, P>> {
-        KeyPair::import(provider, blob.as_ref(), true)
-            .map(|pair| AsymmetricKey::<A, P>::from((pair.0, algo)))
     }
 }
 
@@ -323,54 +467,6 @@ import_blobs!(
 );
 
 // TODO: Come up with an ergonomic high-level API for key importing from parts
-impl AsymmetricKey<Rsa, Private> {
-    pub fn import_from_parts(
-        provider: &AsymmetricAlgorithm,
-        parts: &RsaKeyPrivatePayload,
-    ) -> Result<Self> {
-        let key_bits = parts.modulus.len() * 8;
-        if key_bits % 64 != 0 || key_bits < 512 || key_bits > 16384 {
-            return Err(crate::Error::InvalidParameter);
-        }
-
-        let header = BCRYPT_RSAKEY_BLOB {
-            BitLength: key_bits as u32,
-            Magic: BCRYPT_RSAPRIVATE_MAGIC,
-            cbModulus: parts.modulus.len() as u32,
-            cbPublicExp: parts.pub_exp.len() as u32,
-            cbPrime1: parts.prime1.len() as u32,
-            cbPrime2: parts.prime2.len() as u32,
-        };
-        let blob = Blob::<RsaKeyPrivateBlob>::clone_from_parts(&header, parts);
-
-        <Self as Import<_, _>>::import(Rsa, provider, &blob)
-    }
-}
-
-impl AsymmetricKey<Rsa, Public> {
-    pub fn import_from_parts(
-        provider: &AsymmetricAlgorithm,
-        parts: &RsaKeyPublicPayload,
-    ) -> Result<Self> {
-        let key_bits = parts.modulus.len() * 8;
-        if key_bits % 64 != 0 || key_bits < 512 || key_bits > 16384 {
-            return Err(crate::Error::InvalidParameter);
-        }
-
-        let header = BCRYPT_RSAKEY_BLOB {
-            BitLength: key_bits as u32,
-            Magic: BCRYPT_RSAPUBLIC_MAGIC,
-            cbModulus: parts.modulus.len() as u32,
-            cbPublicExp: parts.pub_exp.len() as u32,
-            cbPrime1: 0,
-            cbPrime2: 0,
-        };
-        let blob = Blob::<RsaKeyPublicBlob>::clone_from_parts(&header, parts);
-
-        <Self as Import<_, _>>::import(Rsa, provider, &blob)
-    }
-}
-
 impl AsymmetricKey<Ecdsa<NistP256>, Private> {
     pub fn import_from_parts(
         provider: &AsymmetricAlgorithm,
@@ -716,41 +812,6 @@ impl AsymmetricKey<Ecdh<NistP521>, Public> {
     }
 }
 
-/// Attempts to export the key to a given blob type.
-///
-/// # Example
-/// ```
-/// use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
-/// use win_crypto_ng::asymmetric::{Algorithm, Rsa, Private, AsymmetricKey};
-/// use win_crypto_ng::asymmetric::Export;
-///
-/// let pair = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
-/// let blob = pair.as_public().export().unwrap();
-/// dbg!(blob.as_bytes());
-///
-/// let public = blob;
-/// let pub_exp = public.pub_exp();
-/// let modulus = public.modulus();
-///
-/// let private = pair.export().unwrap();
-/// assert_eq!(pub_exp, private.pub_exp());
-/// assert_eq!(modulus, private.modulus());
-/// ```
-pub trait Export<A: Algorithm, P: Parts>: Borrow<AsymmetricKey<A, P>> {
-    type Blob: KeyBlob + BlobLayout;
-
-    #[doc(hidden)]
-    fn blob_type(&self) -> BlobType;
-
-    fn export(&self) -> Result<Box<Blob<Self::Blob>>> {
-        let key = self.borrow();
-        let blob_type = self.blob_type();
-
-        let blob = KeyPair::export(key.0.handle, blob_type)?;
-        Ok(blob.try_into().map_err(|_| crate::Error::BadData)?)
-    }
-}
-
 macro_rules! export_blobs {
     ($(($type: ty, $parts: ty, $blob: ty, $blob_type: expr)),*$(,)?) => {
         $(
@@ -817,187 +878,6 @@ impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPrivateBlob {
         match self {
             DsaPrivateBlob::V1(v1) => v1.as_erased(),
             DsaPrivateBlob::V2(v2) => v2.as_erased(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct OaepPadding {
-    algorithm: crate::hash::HashAlgorithmId,
-    label: Vec<u8>,
-}
-
-#[derive(Clone, Debug)]
-pub enum EncryptionPadding {
-    Oaep(OaepPadding),
-    Pkcs1,
-}
-
-struct OaepPaddingInfo<'a> {
-    _borrowed: &'a OaepPadding,
-    value: BCRYPT_OAEP_PADDING_INFO,
-}
-
-impl OaepPadding {
-    fn to_ffi_args<'a>(&self, out: &'a mut WideCString) -> OaepPaddingInfo {
-        *out = WideCString::from(self.algorithm.as_str());
-        OaepPaddingInfo {
-            _borrowed: self,
-            value: BCRYPT_OAEP_PADDING_INFO {
-                pszAlgId: out.as_ptr(),
-                pbLabel: self.label.as_ptr() as *mut _,
-                cbLabel: self.label.len() as u32,
-            },
-        }
-    }
-}
-
-impl EncryptionPadding {
-    fn to_ffi_args<'a>(&'a self, out: &'a mut WideCString) -> (Option<OaepPaddingInfo<'a>>, u32) {
-        match self {
-            Self::Oaep(oaep_padding) => (Some(oaep_padding.to_ffi_args(out)), BCRYPT_PAD_OAEP),
-            Self::Pkcs1 => (None, BCRYPT_PAD_PKCS1),
-        }
-    }
-}
-
-impl AsymmetricKey<Rsa, Private> {
-    pub fn encrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
-        use crate::handle::Handle;
-        use std::ptr::null_mut;
-
-        let mut out = WideCString::new();
-        let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));
-
-        let (pad_info, flags) = padding.as_ref().unwrap_or(&(None, 0));
-        let pad_info = pad_info
-            .as_ref()
-            .map(|pad| &pad.value as *const BCRYPT_OAEP_PADDING_INFO as *mut _);
-
-        let mut encrypted_len = 0;
-        unsafe {
-            crate::Error::check(BCryptEncrypt(
-                self.0.as_ptr(),
-                data.as_ptr() as _,
-                data.len() as _,
-                pad_info.unwrap_or_else(null_mut),
-                null_mut(),
-                0,
-                null_mut(),
-                0,
-                &mut encrypted_len,
-                *flags,
-            ))?;
-
-            let mut output = vec![0u8; encrypted_len as usize];
-
-            crate::Error::check(BCryptEncrypt(
-                self.0.as_ptr(),
-                data.as_ptr() as _,
-                data.len() as _,
-                pad_info.unwrap_or_else(null_mut),
-                null_mut(),
-                0,
-                output.as_mut_ptr(),
-                output.len() as u32,
-                &mut encrypted_len,
-                *flags,
-            ))
-            .map(|_| output.into_boxed_slice())
-        }
-    }
-}
-
-impl AsymmetricKey<Rsa, Public> {
-    pub fn encrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
-        use crate::handle::Handle;
-        use std::ptr::null_mut;
-
-        let mut out = WideCString::new();
-        let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));
-
-        let (pad_info, flags) = padding.as_ref().unwrap_or(&(None, 0));
-        let pad_info = pad_info
-            .as_ref()
-            .map(|pad| &pad.value as *const BCRYPT_OAEP_PADDING_INFO as *mut _);
-
-        let mut encrypted_len = 0;
-        unsafe {
-            crate::Error::check(BCryptEncrypt(
-                self.0.as_ptr(),
-                data.as_ptr() as _,
-                data.len() as _,
-                pad_info.unwrap_or_else(null_mut),
-                null_mut(),
-                0,
-                null_mut(),
-                0,
-                &mut encrypted_len,
-                *flags,
-            ))?;
-
-            let mut output = vec![0u8; encrypted_len as usize];
-
-            crate::Error::check(BCryptEncrypt(
-                self.0.as_ptr(),
-                data.as_ptr() as _,
-                data.len() as _,
-                pad_info.unwrap_or_else(null_mut),
-                null_mut(),
-                0,
-                output.as_mut_ptr(),
-                output.len() as u32,
-                &mut encrypted_len,
-                *flags,
-            ))
-            .map(|_| output.into_boxed_slice())
-        }
-    }
-}
-
-impl AsymmetricKey<Rsa, Private> {
-    pub fn decrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
-        use crate::handle::Handle;
-        use std::ptr::null_mut;
-
-        let mut out = WideCString::new();
-        let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));
-
-        let (pad_info, flags) = padding.as_ref().unwrap_or(&(None, 0));
-        let pad_info = pad_info
-            .as_ref()
-            .map(|pad| &pad.value as *const BCRYPT_OAEP_PADDING_INFO as *mut _);
-
-        let mut encrypted_len = 0;
-        unsafe {
-            crate::Error::check(BCryptDecrypt(
-                self.0.as_ptr(),
-                data.as_ptr() as _,
-                data.len() as _,
-                pad_info.unwrap_or_else(null_mut),
-                null_mut(),
-                0,
-                null_mut(),
-                0,
-                &mut encrypted_len,
-                *flags,
-            ))?;
-
-            let mut output = vec![0u8; encrypted_len as usize];
-
-            crate::Error::check(BCryptDecrypt(
-                self.0.as_ptr(),
-                data.as_ptr() as _,
-                data.len() as _,
-                pad_info.unwrap_or_else(null_mut),
-                null_mut(),
-                0,
-                output.as_mut_ptr(),
-                output.len() as u32,
-                &mut encrypted_len,
-                *flags,
-            ))
-            .map(|_| output.into_boxed_slice())
         }
     }
 }
@@ -1082,4 +962,5 @@ mod tests {
         let decoded = key.decrypt(padding, ciphertext.as_ref()).unwrap();
         assert_eq!(plaintext, decoded.as_ref());
     }
+}
 }
