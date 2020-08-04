@@ -49,9 +49,21 @@ use crate::helpers::{AlgoHandle, Handle, WindowsString};
 use crate::property::{AlgorithmName, HashLength, InitializationVector, ObjectLength};
 use crate::{Error, Result};
 use std::convert::TryFrom;
+use std::marker::PhantomData;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
 use winapi::shared::minwindef::{PUCHAR, ULONG};
+
+/// Algorithm kind used with hashing facilities.
+///
+/// This can be either a regular [`HashAlgorithmId`] (hash function)
+/// or [`MacAlgorithmId`] (message authentication code).
+///
+/// [`HashAlgorithmId`]: ./enum.HashAlgorithmId.html
+/// [`MacAlgorithmId`]: ./enum.MacAlgorithmId.html
+pub trait AlgorithmKind {
+    fn to_str(&self) -> &'static str;
+}
 
 /// Hashing algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
@@ -84,6 +96,17 @@ pub enum HashAlgorithmId {
     ///
     /// Standard: RFC 1321.
     Md5,
+}
+
+impl AlgorithmKind for HashAlgorithmId {
+    fn to_str(&self) -> &'static str {
+        HashAlgorithmId::to_str(*self)
+    }
+}
+
+/// MAC (Message authentication code) algorithm identifiers
+#[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
+pub enum MacAlgorithmId {
     // The advanced encryption standard (AES) cipher based message authentication code (CMAC) symmetric encryption algorithm.
     //
     // Standard: SP 800-38B.
@@ -98,6 +121,12 @@ pub enum HashAlgorithmId {
     AesGmac,
 }
 
+impl AlgorithmKind for MacAlgorithmId {
+    fn to_str(&self) -> &'static str {
+        MacAlgorithmId::to_str(*self)
+    }
+}
+
 impl HashAlgorithmId {
     fn to_str(self) -> &'static str {
         match self {
@@ -108,8 +137,6 @@ impl HashAlgorithmId {
             Self::Md2 => BCRYPT_MD2_ALGORITHM,
             Self::Md4 => BCRYPT_MD4_ALGORITHM,
             Self::Md5 => BCRYPT_MD5_ALGORITHM,
-            Self::AesCmac => BCRYPT_AES_CMAC_ALGORITHM,
-            Self::AesGmac => BCRYPT_AES_GMAC_ALGORITHM,
         }
     }
 }
@@ -126,6 +153,25 @@ impl<'a> TryFrom<&'a str> for HashAlgorithmId {
             BCRYPT_MD2_ALGORITHM => Ok(Self::Md2),
             BCRYPT_MD4_ALGORITHM => Ok(Self::Md4),
             BCRYPT_MD5_ALGORITHM => Ok(Self::Md5),
+            val => Err(val),
+        }
+    }
+}
+
+impl MacAlgorithmId {
+    fn to_str(self) -> &'static str {
+        match self {
+            Self::AesCmac => BCRYPT_AES_CMAC_ALGORITHM,
+            Self::AesGmac => BCRYPT_AES_GMAC_ALGORITHM,
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a str> for MacAlgorithmId {
+    type Error = &'a str;
+
+    fn try_from(val: &'a str) -> std::result::Result<MacAlgorithmId, Self::Error> {
+        match val {
             BCRYPT_AES_CMAC_ALGORITHM => Ok(Self::AesCmac),
             BCRYPT_AES_GMAC_ALGORITHM => Ok(Self::AesGmac),
             val => Err(val),
@@ -134,11 +180,12 @@ impl<'a> TryFrom<&'a str> for HashAlgorithmId {
 }
 
 /// Hashing algorithm
-pub struct HashAlgorithm {
+pub struct HashAlgorithm<Kind: AlgorithmKind> {
     handle: AlgoHandle,
+    _kind: PhantomData<Kind>,
 }
 
-impl HashAlgorithm {
+impl<Kind: AlgorithmKind> HashAlgorithm<Kind> {
     /// Open a hash algorithm provider
     ///
     /// # Examples
@@ -149,23 +196,13 @@ impl HashAlgorithm {
     ///
     /// assert!(algo.is_ok());
     /// ```
-    pub fn open(id: HashAlgorithmId) -> Result<Self> {
+    pub fn open(id: Kind) -> Result<Self> {
         let handle = AlgoHandle::open(id.to_str())?;
 
-        Ok(Self { handle })
-    }
-
-    /// Creates a new hash from the algorithm
-    pub fn new_hash(&self) -> Result<Hash> {
-        self.create_hash(None, None)
-    }
-
-    /// Creates a new Message Authentication Code (MAC), if supported by the
-    /// backing algorithm (AES-GMAC/AES-CMAC).
-    ///
-    /// Passing IV is required for GMAC mode, otherwise don't pass it for OMAC.
-    pub fn new_mac(&self, secret: &[u8], iv: Option<&[u8]>) -> Result<Hash> {
-        self.create_hash(Some(secret), iv)
+        Ok(Self {
+            handle,
+            _kind: PhantomData,
+        })
     }
 
     fn create_hash(&self, secret: Option<&[u8]>, iv: Option<&[u8]>) -> Result<Hash> {
@@ -196,6 +233,23 @@ impl HashAlgorithm {
             handle: hash_handle,
             object,
         })
+    }
+}
+
+impl HashAlgorithm<HashAlgorithmId> {
+    /// Creates a new hash from the algorithm
+    pub fn new_hash(&self) -> Result<Hash> {
+        self.create_hash(None, None)
+    }
+}
+
+impl HashAlgorithm<MacAlgorithmId> {
+    /// Creates a new Message Authentication Code (MAC), if supported by the
+    /// backing algorithm (AES-GMAC/AES-CMAC).
+    ///
+    /// Passing IV is required for GMAC mode, otherwise don't pass it for OMAC.
+    pub fn new_mac(&self, secret: &[u8], iv: Option<&[u8]>) -> Result<Hash> {
+        self.create_hash(Some(secret), iv)
     }
 }
 
@@ -516,7 +570,7 @@ mod tests {
 
         for (key, msg, tag) in test_vectors {
             let (key, msg, tag) = (&key.as_hex(), &msg.as_hex(), &tag.as_hex());
-            check_mac(HashAlgorithmId::AesCmac, msg, tag, key);
+            check_mac(MacAlgorithmId::AesCmac, msg, tag, key);
         }
     }
 
@@ -524,7 +578,7 @@ mod tests {
     fn gmac() {
         // Test select vectors from (PTlen = 0 are effectively GMAC vectors)
         // http://csrc.nist.gov/groups/STM/cavp/documents/mac/gcmtestvectors.zip
-        let algo = HashAlgorithm::open(HashAlgorithmId::AesGmac).unwrap();
+        let algo = HashAlgorithm::open(MacAlgorithmId::AesGmac).unwrap();
 
         let key = &"ce8d1103100fa290f953fbb439efdee4".as_hex();
         let iv = &"4874c6f8082366fc7e49b933".as_hex();
@@ -547,7 +601,7 @@ mod tests {
         );
     }
 
-    fn check_mac(algo_id: HashAlgorithmId, data: &[u8], expected_hash: &[u8], secret: &[u8]) {
+    fn check_mac(algo_id: MacAlgorithmId, data: &[u8], expected_hash: &[u8], secret: &[u8]) {
         let algo = HashAlgorithm::open(algo_id).unwrap();
         let mut hash = algo.new_mac(secret, None).unwrap();
         let hash_size = hash.hash_size().unwrap();
