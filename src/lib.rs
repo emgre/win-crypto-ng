@@ -42,7 +42,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl Error {
-    fn check(status: NTSTATUS) -> Result<()> {
+    fn check(status: NTSTATUS) -> crate::Result<()> {
         match status {
             ntstatus::STATUS_SUCCESS => Ok(()),
             ntstatus::STATUS_NOT_FOUND => Err(Error::NotFound),
@@ -58,4 +58,4 @@ impl Error {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = crate::Error> = std::result::Result<T, E>;
