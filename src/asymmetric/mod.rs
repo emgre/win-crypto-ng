@@ -24,6 +24,7 @@ use ecc::{Curve25519, NistP256, NistP384, NistP521};
 
 pub mod builder;
 pub mod ecc;
+pub mod signature;
 
 /// Asymmetric algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialEq)]
