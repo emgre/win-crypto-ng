@@ -1,12 +1,13 @@
 use crate::property::Property;
 use crate::{Error, Result};
-use std::ffi::{OsStr, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, VOID};
+
+mod windows_string;
+pub use windows_string::WindowsString;
 
 pub trait Handle {
     fn as_ptr(&self) -> BCRYPT_HANDLE;
@@ -136,48 +137,6 @@ impl Handle for AlgoHandle {
 
     fn as_mut_ptr(&mut self) -> *mut BCRYPT_ALG_HANDLE {
         &mut self.handle
-    }
-}
-
-pub struct WindowsString {
-    inner: Vec<u16>,
-}
-
-#[allow(dead_code)]
-impl WindowsString {
-    pub fn from_str(value: &str) -> Self {
-        Self {
-            inner: OsStr::new(value)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect(),
-        }
-    }
-
-    pub fn from_ptr(ptr: *const u16) -> Self {
-        unsafe {
-            let len = (0..).take_while(|&i| *ptr.offset(i) != 0).count();
-            Self {
-                inner: std::slice::from_raw_parts(ptr, len).to_vec(),
-            }
-        }
-    }
-
-    pub fn as_slice(&self) -> &[u16] {
-        self.inner.as_slice()
-    }
-
-    pub fn as_ptr(&self) -> LPCWSTR {
-        self.inner.as_ptr()
-    }
-}
-
-impl ToString for WindowsString {
-    fn to_string(&self) -> String {
-        OsString::from_wide(&self.inner)
-            .to_string_lossy()
-            .as_ref()
-            .to_string()
     }
 }
 
