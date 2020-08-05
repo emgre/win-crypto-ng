@@ -1,23 +1,29 @@
-//! Cryptographic hash algorithms
+//! Cryptographic hash algorithms & MAC functions
 //!
-//! Cryptographic hash algorithms are mathematicl algorithms that map data of arbitrary size to a
+//! Cryptographic hash algorithms are mathematical algorithms that map data of arbitrary size to a
 //! fixed size value. There are one-way functions practically infeasible to invert.
+//!
+//! Message authentication code (MAC) is a short piece of information attached
+//! to a message confirming its authenticity and data integrity.
 //!
 //! # Usage
 //!
 //! The first step is to create an instance of the algorithm needed. All the hash algorithms
-//! supported are defined in the [`HashAlgorithmId`] enum.
+//! supported are defined in the [`HashAlgorithmId`] enum. For MACs, see the [`MacAlgorithmId`] enum.
 //!
 //! The creation of an algorithm can be relatively time-intensive. Therefore, it is advised to cache
 //! and reuse the created algorithms.
 //!
-//! Once the algorithm is created, an instance of an hash can be created. Using the [`hash`] method,
+//! Once the algorithm is created, an instance of an hash can be created. It's worth noting that
+//! hash and MAC instances share the underlying [`Hash`] type.
+//!
+//! Using the [`hash`][`Hash::hash`] method,
 //! it is possible to hash per block. For example, if the user wants to hash a large file, it can
-//! call the [`hash`] multiple times with only a subset of the file, limiting the memory usage.
-//! The final result will be exactly the same as if the whole file was loaded and [`hash`] was
+//! call the [`hash`][`Hash::hash`] multiple times with only a subset of the file, limiting the memory usage.
+//! The final result will be exactly the same as if the whole file was loaded and [`hash`][`Hash::hash`] was
 //! called once.
 //!
-//! To get the hash value, the user must call the [`finish`] method. This effectively consumes the
+//! To get the hash value, the user must call the [`finish`][`Hash::finish`] method. This effectively consumes the
 //! hash instance. To start the calculation of a new hash, a new instance must be created from the
 //! algorithm.
 //!
@@ -38,11 +44,36 @@
 //!     0x32, 0xE9, 0xB3, 0xAE, 0x3B, 0x64, 0xD4, 0xEB,
 //!     0x0A, 0x46, 0xFB, 0x65, 0x7B, 0x41, 0x56, 0x2C,
 //! ]);
+//!```
+//! The example below computes a simple MAC value from null input, using the AES-GMAC algorithm:
+//! ```
+//! use win_crypto_ng::hash::{HashAlgorithm, MacAlgorithmId};
+//!
+//! const SECRET: &[u8] = &[
+//!   0xcf, 0x06, 0x3a, 0x34, 0xd4, 0xa9, 0xa7, 0x6c,
+//!   0x2c, 0x86, 0x78, 0x7d, 0x3f, 0x96, 0xdb, 0x71,
+//! ];
+//! const IV: &[u8] = &[
+//!   0x11, 0x3b, 0x97, 0x85, 0x97, 0x18, 0x64, 0xc8,
+//!   0x3b, 0x01, 0xc7, 0x87
+//! ];
+//!
+//! let algo = HashAlgorithm::open(MacAlgorithmId::AesGmac).unwrap();
+//! let mut mac = algo.new_mac(SECRET, Some(IV)).unwrap();
+//! mac.hash(&[]).unwrap();
+//! let result = mac.finish().unwrap();
+//!
+//! assert_eq!(result.as_slice(), &[
+//!   0x72, 0xac, 0x84, 0x93, 0xe3, 0xa5, 0x22, 0x8b,
+//!   0x5d, 0x13, 0x0a, 0x69, 0xd2, 0x51, 0x0e, 0x42,
+//! ]);
 //! ```
 //!
 //! [`HashAlgorithmId`]: enum.HashAlgorithmId.html
-//! [`hash`]: struct.Hash.html#method.hash
-//! [`finish`]: struct.Hash.html#method.finish
+//! [`MacAlgorithmId`]: enum.MacAlgorithmId.html
+//! [`Hash`]: struct.Hash.html
+//! [`Hash::hash]: struct.Hash.html#method.hash
+//! [`Hash::finish`]: struct.Hash.html#method.finish
 
 use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, WindowsString};
@@ -107,17 +138,17 @@ impl AlgorithmKind for HashAlgorithmId {
 /// MAC (Message authentication code) algorithm identifiers
 #[derive(Debug, Clone, Copy, PartialOrd, PartialEq)]
 pub enum MacAlgorithmId {
-    // The advanced encryption standard (AES) cipher based message authentication code (CMAC) symmetric encryption algorithm.
-    //
-    // Standard: SP 800-38B.
-    //
-    // **Windows 8**: Support for this algorithm begins.
+    /// The advanced encryption standard (AES) cipher based message authentication code (CMAC) symmetric encryption algorithm.
+    ///
+    /// Standard: SP 800-38B.
+    ///
+    /// **Windows 8**: Support for this algorithm begins.
     AesCmac,
-    // The advanced encryption standard (AES) Galois message authentication code (GMAC) symmetric encryption algorithm.
-    //
-    // Standard: SP800-38D.
-    //
-    // **Windows Vista**: This algorithm is supported beginning with Windows Vista with SP1.
+    /// The advanced encryption standard (AES) Galois message authentication code (GMAC) symmetric encryption algorithm.
+    ///
+    /// Standard: SP800-38D.
+    ///
+    /// **Windows Vista**: This algorithm is supported beginning with Windows Vista with SP1.
     AesGmac,
 }
 
