@@ -13,6 +13,7 @@ jobs:
         features:
           - ""
           - "zeroize"
+          - "rand"
         exclude: # Zeroize 1.1 supports Rust 1.39+
           - rust: 1.37.0
             features: "zeroize"
