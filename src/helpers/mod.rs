@@ -6,6 +6,8 @@ use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, VOID};
 
+mod bytes;
+pub use bytes::{AsBytes, FromBytes, Pod};
 mod windows_string;
 pub use windows_string::WindowsString;
 
