@@ -69,11 +69,11 @@ pub trait Handle {
             // allocate
             assert_eq!(result.len(), size as usize);
 
-            MaybeUnsized::Unsized(unsafe { TypedBlob::from_box(result) })
+            MaybeUnsized::Unsized(FromBytes::from_boxed(result))
         })
     }
 
-    fn get_property_unsized<T: Property>(&self) -> Result<TypedBlob<T::Value>> {
+    fn get_property_unsized<T: Property>(&self) -> Result<Box<T::Value>> {
         let property = WindowsString::from(T::IDENTIFIER);
 
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
@@ -90,7 +90,7 @@ pub trait Handle {
             ))?;
         }
 
-        Ok(unsafe { TypedBlob::from_box_unsized(result) })
+        Ok(FromBytes::from_boxed(result))
     }
 }
 
@@ -254,7 +254,7 @@ impl<T: ?Sized> TypedBlob<T> {
 /// static.
 pub enum MaybeUnsized<T> {
     Inline(T),
-    Unsized(TypedBlob<T>),
+    Unsized(Box<T>),
 }
 
 impl<T: Copy> MaybeUnsized<T> {
