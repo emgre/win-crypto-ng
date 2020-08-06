@@ -3,6 +3,7 @@ use winapi::shared::ntdef::NTSTATUS;
 use winapi::shared::ntstatus;
 
 use std::fmt;
+use std::num::NonZeroU32;
 
 pub mod buffer;
 pub mod hash;
@@ -55,6 +56,24 @@ impl Error {
             ntstatus::STATUS_INVALID_BUFFER_SIZE => Err(Error::InvalidBufferSize),
             value => Err(Error::Unknown(value)),
         }
+    }
+}
+
+impl Into<NonZeroU32> for Error {
+    fn into(self) -> NonZeroU32 {
+        let code: i32 = match self {
+            Error::NotFound => ntstatus::STATUS_NOT_FOUND,
+            Error::InvalidParameter => ntstatus::STATUS_INVALID_PARAMETER,
+            Error::BufferTooSmall => ntstatus::STATUS_BUFFER_TOO_SMALL,
+            Error::InvalidHandle => ntstatus::STATUS_INVALID_HANDLE,
+            Error::NotSupported => ntstatus::STATUS_NOT_SUPPORTED,
+            Error::AuthTagMismatch => ntstatus::STATUS_AUTH_TAG_MISMATCH,
+            Error::InvalidBufferSize => ntstatus::STATUS_INVALID_BUFFER_SIZE,
+            Error::NoMemory => ntstatus::STATUS_NO_MEMORY,
+            Error::Unknown(value) => value,
+        };
+
+        NonZeroU32::new(code.abs() as u32).expect("Error to not be STATUS_SUCCESS")
     }
 }
 
