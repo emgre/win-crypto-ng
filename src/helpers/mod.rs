@@ -1,19 +1,20 @@
 use crate::property::Property;
 use crate::{Error, Result};
-use std::ffi::{OsStr, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::ptr::{null, null_mut};
 use winapi::shared::bcrypt::*;
 use winapi::shared::ntdef::{LPCWSTR, PUCHAR, ULONG, VOID};
+
+mod windows_string;
+pub use windows_string::WindowsString;
 
 pub trait Handle {
     fn as_ptr(&self) -> BCRYPT_HANDLE;
     fn as_mut_ptr(&mut self) -> *mut BCRYPT_HANDLE;
 
     fn set_property<T: Property>(&self, value: &T::Value) -> Result<()> {
-        let property = WindowsString::from_str(T::IDENTIFIER);
+        let property = WindowsString::from(T::IDENTIFIER);
         unsafe {
             Error::check(BCryptSetProperty(
                 self.as_ptr(),
@@ -29,7 +30,7 @@ pub trait Handle {
     where
         T::Value: Sized,
     {
-        let property = WindowsString::from_str(T::IDENTIFIER);
+        let property = WindowsString::from(T::IDENTIFIER);
         // Determine how much data we need to allocate for the return value
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
 
@@ -71,7 +72,7 @@ pub trait Handle {
     }
 
     fn get_property_unsized<T: Property>(&self) -> Result<TypedBlob<T::Value>> {
-        let property = WindowsString::from_str(T::IDENTIFIER);
+        let property = WindowsString::from(T::IDENTIFIER);
 
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
         let mut result = vec![0u8; size as usize].into_boxed_slice();
@@ -107,7 +108,7 @@ impl AlgoHandle {
     pub fn open(id: &str) -> Result<Self> {
         let mut handle = null_mut::<VOID>();
         unsafe {
-            let id_str = WindowsString::from_str(id);
+            let id_str = WindowsString::from(id);
             Error::check(BCryptOpenAlgorithmProvider(
                 &mut handle,
                 id_str.as_ptr(),
@@ -136,48 +137,6 @@ impl Handle for AlgoHandle {
 
     fn as_mut_ptr(&mut self) -> *mut BCRYPT_ALG_HANDLE {
         &mut self.handle
-    }
-}
-
-pub struct WindowsString {
-    inner: Vec<u16>,
-}
-
-#[allow(dead_code)]
-impl WindowsString {
-    pub fn from_str(value: &str) -> Self {
-        Self {
-            inner: OsStr::new(value)
-                .encode_wide()
-                .chain(Some(0).into_iter())
-                .collect(),
-        }
-    }
-
-    pub fn from_ptr(ptr: *const u16) -> Self {
-        unsafe {
-            let len = (0..).take_while(|&i| *ptr.offset(i) != 0).count();
-            Self {
-                inner: std::slice::from_raw_parts(ptr, len).to_vec(),
-            }
-        }
-    }
-
-    pub fn as_slice(&self) -> &[u16] {
-        self.inner.as_slice()
-    }
-
-    pub fn as_ptr(&self) -> LPCWSTR {
-        self.inner.as_ptr()
-    }
-}
-
-impl ToString for WindowsString {
-    fn to_string(&self) -> String {
-        OsString::from_wide(&self.inner)
-            .to_string_lossy()
-            .as_ref()
-            .to_string()
     }
 }
 

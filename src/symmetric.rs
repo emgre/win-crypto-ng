@@ -179,8 +179,8 @@ impl SymmetricAlgorithm {
     pub fn open(id: SymmetricAlgorithmId, chaining_mode: ChainingMode) -> Result<Self> {
         let handle = AlgoHandle::open(id.to_str())?;
 
-        let value = WindowsString::from_str(chaining_mode.to_str());
-        handle.set_property::<property::ChainingMode>(value.as_slice())?;
+        let value = WindowsString::from(chaining_mode.to_str());
+        handle.set_property::<property::ChainingMode>(value.as_slice_with_nul())?;
 
         Ok(Self {
             handle,
