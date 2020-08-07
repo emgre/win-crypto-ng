@@ -186,10 +186,10 @@ impl RandomNumberGenerator {
     }
 }
 
-#[cfg(feature = "rand-trait")]
+#[cfg(feature = "rand")]
 impl rand_core::CryptoRng for RandomNumberGenerator {}
 
-#[cfg(feature = "rand-trait")]
+#[cfg(feature = "rand")]
 impl rand_core::RngCore for RandomNumberGenerator {
     fn next_u32(&mut self) -> u32 {
         rand_core::impls::next_u32_via_fill(self)
