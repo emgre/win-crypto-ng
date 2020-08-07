@@ -5,13 +5,15 @@ use winapi::shared::ntstatus;
 use std::fmt;
 use std::num::NonZeroU32;
 
+pub mod asymmetric;
 pub mod buffer;
 pub mod hash;
+pub mod key_blob;
 pub mod property;
 pub mod random;
 pub mod symmetric;
 
-mod helpers;
+pub mod helpers;
 
 // Compile and test the README
 doctest!("../README.md");
@@ -30,6 +32,8 @@ pub enum Error {
     NotSupported,
     AuthTagMismatch,
     InvalidBufferSize,
+    Unsuccessful,
+    BadData,
 
     Unknown(NTSTATUS),
 }
@@ -54,6 +58,8 @@ impl Error {
             ntstatus::STATUS_NOT_SUPPORTED => Err(Error::NotSupported),
             ntstatus::STATUS_AUTH_TAG_MISMATCH => Err(Error::AuthTagMismatch),
             ntstatus::STATUS_INVALID_BUFFER_SIZE => Err(Error::InvalidBufferSize),
+            ntstatus::STATUS_DATA_ERROR => Err(Error::BadData),
+            ntstatus::STATUS_UNSUCCESSFUL => Err(Error::Unsuccessful),
             value => Err(Error::Unknown(value)),
         }
     }
@@ -69,6 +75,8 @@ impl Into<NonZeroU32> for Error {
             Error::NotSupported => ntstatus::STATUS_NOT_SUPPORTED,
             Error::AuthTagMismatch => ntstatus::STATUS_AUTH_TAG_MISMATCH,
             Error::InvalidBufferSize => ntstatus::STATUS_INVALID_BUFFER_SIZE,
+            Error::BadData => ntstatus::STATUS_DATA_ERROR,
+            Error::Unsuccessful => ntstatus::STATUS_UNSUCCESSFUL,
             Error::NoMemory => ntstatus::STATUS_NO_MEMORY,
             Error::Unknown(value) => value,
         };
