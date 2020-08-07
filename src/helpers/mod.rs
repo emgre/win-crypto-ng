@@ -28,49 +28,38 @@ pub trait Handle {
         }
     }
 
-    fn get_property<T: Property>(&self) -> Result<MaybeUnsized<T::Value>>
+    fn get_property<T: Property>(&self) -> Result<T::Value>
     where
         T::Value: Sized,
     {
         let property = WindowsString::from(T::IDENTIFIER);
         // Determine how much data we need to allocate for the return value
         let mut size = get_property_size(self.as_ptr(), property.as_ptr())?;
+        assert_eq!(
+            size as usize,
+            std::mem::size_of::<T::Value>(),
+            "CNG property needs to allocate extra data in sized get_property variant"
+        );
 
         // We are not expected to allocate extra trailing data, so construct the
         // value and return it inline (especially important for `Copy` types)
-        Ok(if size as usize == std::mem::size_of::<T::Value>() {
-            let mut result = MaybeUninit::<T::Value>::uninit();
+        let mut result = MaybeUninit::<T::Value>::uninit();
 
-            unsafe {
-                Error::check(BCryptGetProperty(
-                    self.as_ptr(),
-                    property.as_ptr(),
-                    result.as_mut_ptr() as *mut _,
-                    size,
-                    &mut size,
-                    0,
-                ))?;
-            }
+        unsafe {
+            Error::check(BCryptGetProperty(
+                self.as_ptr(),
+                property.as_ptr(),
+                result.as_mut_ptr() as *mut _,
+                size,
+                &mut size,
+                0,
+            ))?;
+        }
+        // SAFETY: Verify that the API call has written the exact amount of
+        // bytes, so that we can conclude it's been entirely initialized
+        assert_eq!(size as usize, std::mem::size_of::<T::Value>());
 
-            MaybeUnsized::Inline(unsafe { result.assume_init() })
-        } else {
-            let mut result = vec![0u8; size as usize].into_boxed_slice();
-            unsafe {
-                Error::check(BCryptGetProperty(
-                    self.as_ptr(),
-                    property.as_ptr(),
-                    result.as_mut_ptr(),
-                    size,
-                    &mut size,
-                    0,
-                ))?;
-            }
-            // Assert that we actually wrote as many bytes as we were asked to
-            // allocate
-            assert_eq!(result.len(), size as usize);
-
-            MaybeUnsized::Unsized(FromBytes::from_boxed(result))
-        })
+        Ok(unsafe { result.assume_init() })
     }
 
     fn get_property_unsized<T: Property>(&self) -> Result<Box<T::Value>> {
@@ -89,6 +78,9 @@ pub trait Handle {
                 0,
             ))?;
         }
+        // SAFETY: Verify that the API call has written the exact amount of
+        // bytes, so that we can conclude it's been entirely initialized
+        assert_eq!(size as usize, result.len());
 
         Ok(FromBytes::from_boxed(result))
     }

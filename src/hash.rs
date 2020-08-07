@@ -240,7 +240,7 @@ impl<Kind: AlgorithmKind> HashAlgorithm<Kind> {
         let (sec_ptr, sec_len) = secret
             .map(|x| (x.as_ptr(), x.len()))
             .unwrap_or((std::ptr::null(), 0));
-        let object_size = self.handle.get_property::<ObjectLength>()?.copied();
+        let object_size = self.handle.get_property::<ObjectLength>()?;
 
         let mut hash_handle = HashHandle::new();
         let mut object = Buffer::new(object_size as usize);
@@ -398,7 +398,7 @@ impl Hash {
     pub fn hash_size(&self) -> Result<usize> {
         self.handle
             .get_property::<HashLength>()
-            .map(|hash_size| hash_size.copied() as usize)
+            .map(|hash_size| hash_size as usize)
     }
 
     /// Get the hash algorithm used for this hash object.
