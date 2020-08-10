@@ -4,8 +4,6 @@
 //! keys: *public key*, which can be known by others, and *private key*, which
 //! is known only to the owner. The most common usages include encryption and
 //! digital signing.
-//!
-//! > **NOTE**: This is currently a stub and should be expanded.
 
 use crate::helpers::WindowsString;
 use crate::helpers::{AlgoHandle, Handle, KeyHandle};
@@ -28,7 +26,7 @@ pub mod builder;
 pub mod ecc;
 pub mod signature;
 
-/// Asymmetric algorithm identifiers
+/// Asymmetric algorithm identifiers.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AsymmetricAlgorithmId {
     /// The Diffie-Hellman key exchange algorithm.
@@ -116,7 +114,7 @@ impl<'a> TryFrom<&'a str> for AsymmetricAlgorithmId {
     }
 }
 
-/// Asymmetric algorithm
+/// Asymmetric algorithm provider.
 pub struct AsymmetricAlgorithm {
     handle: AlgoHandle,
 }
@@ -177,6 +175,12 @@ impl AsymmetricAlgorithm {
     }
 }
 
+/// Marker trait for an asymmetric algorithm.
+pub trait Algorithm {
+    fn id(&self) -> AsymmetricAlgorithmId;
+}
+
+/// Marker type representing the ECDSA (Elliptic Curve Digital Signature Algorithm).
 pub struct Ecdsa<C: Curve>(pub C);
 impl<C: Curve> Algorithm for Ecdsa<C> {
     #[inline(always)]
@@ -185,6 +189,7 @@ impl<C: Curve> Algorithm for Ecdsa<C> {
     }
 }
 
+/// Marker type representing the ECDH (Elliptic Curve Diffie-Hellman) algorithm.
 pub struct Ecdh<C: Curve>(pub C);
 impl<C: Curve> Algorithm for Ecdh<C> {
     #[inline(always)]
@@ -193,30 +198,39 @@ impl<C: Curve> Algorithm for Ecdh<C> {
     }
 }
 
-/// Marker trait for an asymmetric algorithm.
-pub trait Algorithm {
-    fn id(&self) -> AsymmetricAlgorithmId;
+/// Marker type representing the DH (Diffie-Hellman) algorithm.
+pub struct Dh;
+impl Algorithm for Dh {
+    #[inline(always)]
+    fn id(&self) -> AsymmetricAlgorithmId {
+        AsymmetricAlgorithmId::Dh
+    }
 }
 
-macro_rules! algo_struct {
-    (pub struct $ident: ident, $algo: expr) => {
-        pub struct $ident;
-        impl Algorithm for $ident {
-            #[inline(always)]
-            fn id(&self) -> AsymmetricAlgorithmId {
-                $algo
-            }
-        }
-    };
+/// Marker type representing the DSA (Digital Signature Algorithm).
+pub struct Dsa;
+impl Algorithm for Dsa {
+    #[inline(always)]
+    fn id(&self) -> AsymmetricAlgorithmId {
+        AsymmetricAlgorithmId::Dsa
+    }
 }
 
-algo_struct!(pub struct Dh, AsymmetricAlgorithmId::Dh);
-algo_struct!(pub struct Dsa, AsymmetricAlgorithmId::Dsa);
-algo_struct!(pub struct Rsa, AsymmetricAlgorithmId::Rsa);
+/// Marker type representing the RSA (Rivest-Shamir-Adleman) algorithm.
+pub struct Rsa;
+impl Algorithm for Rsa {
+    #[inline(always)]
+    fn id(&self) -> AsymmetricAlgorithmId {
+        AsymmetricAlgorithmId::Rsa
+    }
+}
 
+/// Marker trait used to denote whether a key holds public or private parts.
 pub trait Parts {}
+/// Marker type used to denote private key parts.
 pub struct Private {}
 impl Parts for Private {}
+/// Marker type used to denote public key parts.
 pub struct Public {}
 impl Parts for Public {}
 
@@ -226,6 +240,45 @@ impl Algorithm for AsymmetricAlgorithmId {
     }
 }
 
+/// Asymmetric key handle.
+///
+/// Can be specified as that of which type is known at run-time (erased) or
+/// with a concrete algorithm parameter.
+///
+/// ## Type-safety
+/// At the time of writing, all of the relevant crypto operations are
+/// implemented for only keys whose algorithm is statically known. This means
+/// that the keys using the dynamic `AsymmetricAlgorithmId` need to be
+/// re-imported in order to statically verify the algorithm used.
+///
+/// ```
+/// use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, AsymmetricKey};
+/// use win_crypto_ng::asymmetric::{Rsa, Private, Import, Export};
+///
+/// let dynamic: AsymmetricKey<AsymmetricAlgorithmId, Private> =
+///     AsymmetricKey::builder(AsymmetricAlgorithmId::Rsa).key_bits(512).build().unwrap();
+/// let dynamic_blob = dynamic.export().unwrap();
+///
+/// let provider = AsymmetricAlgorithm::open(AsymmetricAlgorithmId::Rsa).unwrap();
+/// let rsa_blob = dynamic_blob.try_into().unwrap_or_else(|_| panic!());
+/// let rsa_key = AsymmetricKey::<Rsa, Private>::import(Rsa, &provider, &rsa_blob).unwrap();
+/// // Can now additional impls for `AsymmetricKey<Rsa, Private>`, e.g.
+/// // rsa_key.decrypt(..);
+/// ```
+///
+/// ## Generation
+/// ```
+/// use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, AsymmetricKey};
+/// use win_crypto_ng::asymmetric::{Rsa, Private};
+///
+/// // Handle to an asymmetric key whose algorithm ID is known at run-time
+/// let handle: AsymmetricKey<AsymmetricAlgorithmId, Private> =
+///     AsymmetricKey::builder(AsymmetricAlgorithmId::Rsa).key_bits(512).build().unwrap();
+///
+/// // Handle to an asymmetric key whose algorithm is known to be RSA
+/// let handle: AsymmetricKey<Rsa, Private> =
+///     AsymmetricKey::builder(Rsa).key_bits(512).build().unwrap();
+/// ```
 pub struct AsymmetricKey<A: Algorithm = AsymmetricAlgorithmId, P: Parts = Public>(
     KeyHandle,
     A,
@@ -233,12 +286,14 @@ pub struct AsymmetricKey<A: Algorithm = AsymmetricAlgorithmId, P: Parts = Public
 );
 
 impl<A: Algorithm, P: Parts> AsymmetricKey<A, P> {
+    /// Returns the asymmetric algorithm ID known at run-time.
     pub fn id(&self) -> AsymmetricAlgorithmId {
         Algorithm::id(&self.1)
     }
 }
 
 impl<A: Algorithm> AsymmetricKey<A, Private> {
+    /// Views the key pair as having only public key parts.
     pub fn as_public(&self) -> &AsymmetricKey<A, Public> {
         // NOTE: This assumes that Private is always a key pair
         unsafe { &*(self as *const _ as *const AsymmetricKey<A, Public>) }
@@ -246,25 +301,8 @@ impl<A: Algorithm> AsymmetricKey<A, Private> {
 }
 
 impl AsymmetricKey<Rsa, Private> {
-    /// Attempts to export the key to a given blob type.
-    /// # Example
-    /// ```
-    /// # use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId};
-    /// # use win_crypto_ng::asymmetric::{Algorithm, Rsa, Private, AsymmetricKey};
-    /// # use win_crypto_ng::asymmetric::Export;
-    ///
-    /// let pair = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
-    /// let blob = pair.as_public().export().unwrap();
-    /// dbg!(blob.as_bytes());
-    ///
-    /// let public = blob;
-    /// let pub_exp = public.pub_exp();
-    /// let modulus = public.modulus();
-    ///
-    /// let private = pair.export_full().unwrap();
-    /// assert_eq!(pub_exp, private.pub_exp());
-    /// assert_eq!(modulus, private.modulus());
-    /// ```
+    /// Export the RSA key to "full" raw data format. Additionally includes
+    /// coefficient and (private) exponents.
     pub fn export_full(&self) -> Result<Box<Blob<RsaKeyFullPrivateBlob>>> {
         Ok(KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
             .try_into()
@@ -272,6 +310,7 @@ impl AsymmetricKey<Rsa, Private> {
     }
 }
 
+/// Import asymmetric key using the raw key data format.
 pub trait Import<'a, A: Algorithm, P: Parts> {
     type Blob: AsRef<Blob<ErasedKeyBlob>> + 'a;
     fn import(
@@ -713,7 +752,7 @@ impl AsymmetricKey<Ecdh<NistP521>, Public> {
     }
 }
 
-/// Attempts to export the key to a given blob type.
+/// Export asymmetric key to the raw key data format.
 ///
 /// # Example
 /// ```
@@ -788,8 +827,11 @@ export_blobs!(
     (Rsa, Private, RsaKeyPrivateBlob, BlobType::RsaPrivate),
 );
 
+/// Raw public DSA key data blob.
 pub enum DsaPublicBlob {
+    /// Used with keys having ≤ 1024 bit length.
     V1(Box<Blob<DsaKeyPublicBlob>>),
+    /// Used with keys having > 1024 bit length.
     V2(Box<Blob<DsaKeyPublicV2Blob>>),
 }
 
@@ -802,6 +844,9 @@ impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPublicBlob {
     }
 }
 
+/// Raw private DSA key data blob.
+///
+/// For keys of ≤ 1024 bit length, use the `V1` variant. Otherwise, use `V2`.
 pub enum DsaPrivateBlob {
     V1(Box<Blob<DsaKeyPrivateBlob>>),
     V2(Box<Blob<DsaKeyPrivateV2Blob>>),
@@ -816,20 +861,26 @@ impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPrivateBlob {
     }
 }
 
+/// OAEP (Optimal Asymmetric Encryption Padding) data.
 #[derive(Clone, Debug)]
 pub struct OaepPadding {
-    algorithm: crate::hash::HashAlgorithmId,
-    label: Vec<u8>,
+    pub algorithm: crate::hash::HashAlgorithmId,
+    pub label: Vec<u8>,
 }
 
+/// Supported encryption padding schemes.
 #[derive(Clone, Debug)]
 pub enum EncryptionPadding {
+    /// OAEP (Optimal Asymmetric Encryption Padding) scheme.
     Oaep(OaepPadding),
+    /// PKCS #1 padding scheme.
     Pkcs1,
 }
 
 struct OaepPaddingInfo<'a> {
     _borrowed: &'a OaepPadding,
+    // Lifetime marker for borrowed hash algorithm identifier string
+    // FIXME: Just use &'static [u16] for alg ID once winapi 0.4 is released
     value: BCRYPT_OAEP_PADDING_INFO,
 }
 
@@ -857,6 +908,7 @@ impl EncryptionPadding {
 }
 
 impl<P: Parts> AsymmetricKey<Rsa, P> {
+    /// Encrypt a message using the RSA key.
     pub fn encrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
         let mut out = WindowsString::new();
         let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));
@@ -901,6 +953,7 @@ impl<P: Parts> AsymmetricKey<Rsa, P> {
 }
 
 impl AsymmetricKey<Rsa, Private> {
+    /// Decrypt a message using the RSA key.
     pub fn decrypt(&self, padding: Option<EncryptionPadding>, data: &[u8]) -> Result<Box<[u8]>> {
         let mut out = WindowsString::new();
         let padding = padding.as_ref().map(|x| x.to_ffi_args(&mut out));

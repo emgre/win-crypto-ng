@@ -1,4 +1,20 @@
-//! Type-safe builders to generate various asymmetric keys.
+//! Type-safe asymmetric key generation.
+//!
+//! # Example
+//! ```
+//! use win_crypto_ng::asymmetric::{AsymmetricAlgorithm, AsymmetricAlgorithmId, AsymmetricKey};
+//! use win_crypto_ng::asymmetric::{ecc::NistP384, Ecdh, Rsa};
+//!
+//! // Handle to an asymmetric key whose algorithm ID is known at run-time
+//! let handle: AsymmetricKey<AsymmetricAlgorithmId, _> =
+//!     AsymmetricKey::builder(AsymmetricAlgorithmId::Rsa).key_bits(512).build().unwrap();
+//!
+//! // Handle to an asymmetric key whose algorithm is known to be RSA
+//! let handle: AsymmetricKey<Rsa, _> =
+//!     AsymmetricKey::builder(Rsa).key_bits(512).build().unwrap();
+//!
+//! let handle = AsymmetricKey::builder(Ecdh(NistP384)).build().unwrap();
+//! ```
 
 use crate::helpers::{Blob, Pod, WindowsString};
 use crate::helpers::{Handle, KeyHandle};
@@ -14,6 +30,7 @@ use super::{Algorithm, AsymmetricAlgorithm, AsymmetricAlgorithmId, AsymmetricKey
 use super::{Dh, Dsa, Ecdh, Ecdsa, Rsa};
 
 impl AsymmetricKey {
+    /// Create a type-safe builder capable of generating asymmetric keys.
     pub fn builder<B: Algorithm>(algorithm: B) -> Builder<B> {
         Builder { algorithm }
     }
@@ -25,6 +42,7 @@ pub struct Builder<A: Algorithm> {
 }
 
 impl<A: Algorithm + NotNeedsKeySize> Builder<A> {
+    /// Generate the final key.
     pub fn build(self) -> Result<AsymmetricKey<A, Private>> {
         BuilderWithParams {
             key_bits: self.algorithm.id().key_bits().unwrap_or(0),
@@ -36,6 +54,7 @@ impl<A: Algorithm + NotNeedsKeySize> Builder<A> {
 }
 
 impl<A: Algorithm + NeedsKeySize> Builder<A> {
+    /// Supply bits of the key to be generated.
     pub fn key_bits(self, key_bits: u32) -> BuilderWithKeyBits<A> {
         BuilderWithKeyBits {
             algorithm: self.algorithm,
@@ -46,6 +65,10 @@ impl<A: Algorithm + NeedsKeySize> Builder<A> {
 }
 
 impl Builder<Dsa> {
+    /// Supply bits of the key to be generated.
+    ///
+    /// Returns `Ok(..)` if the value in the range of `512..=1024`, otherwise
+    /// returns `(Error::InvalidParameter`.
     pub fn key_bits_in_512_1024(
         self,
         key_bits: u32,
@@ -62,6 +85,10 @@ impl Builder<Dsa> {
         })
     }
 
+    /// Supply bits of the key to be generated.
+    ///
+    /// Returns `Ok(..)` if the value in the range of `1024..=3072`, otherwise
+    /// returns `(Error::InvalidParameter`.
     pub fn key_bits_in_1024_3072(
         self,
         key_bits: u32,
@@ -113,6 +140,7 @@ impl NeedsKeySize for Dsa {}
 impl NeedsKeySize for Rsa {}
 
 impl BuilderWithKeyBits<AsymmetricAlgorithmId> {
+    /// Supply additional algorithm-specific parameters to generate a key with.
     pub fn with_params(
         self,
         params: BuilderOptions,
@@ -126,6 +154,7 @@ impl BuilderWithKeyBits<AsymmetricAlgorithmId> {
 }
 
 impl BuilderWithKeyBits<Dh> {
+    /// Supply additional algorithm-specific parameters to generate a key with.
     pub fn with_params(self, params: DhParams) -> BuilderWithParams<Dh, DhParams> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -136,6 +165,9 @@ impl BuilderWithKeyBits<Dh> {
 }
 
 impl<C: super::Curve> BuilderWithKeyBits<Ecdh<C>> {
+    /// Supply additional algorithm-specific parameters to generate a key with.
+    ///
+    /// Is a no-op.
     pub fn with_params(self, params: ()) -> BuilderWithParams<Ecdh<C>> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -146,6 +178,9 @@ impl<C: super::Curve> BuilderWithKeyBits<Ecdh<C>> {
 }
 
 impl<C: super::Curve> BuilderWithKeyBits<Ecdsa<C>> {
+    /// Supply additional algorithm-specific parameters to generate a key with.
+    ///
+    /// Is a no-op.
     pub fn with_params(self, params: ()) -> BuilderWithParams<Ecdsa<C>> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -156,6 +191,7 @@ impl<C: super::Curve> BuilderWithKeyBits<Ecdsa<C>> {
 }
 
 impl BuilderWithKeyBits<Dsa> {
+    /// Supply additional algorithm-specific parameters to generate a key with.
     pub fn with_params(self, params: DsaParams) -> BuilderWithParams<Dsa, DsaParams> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -166,6 +202,7 @@ impl BuilderWithKeyBits<Dsa> {
 }
 
 impl BuilderWithKeyBits<Dsa, KeyBitsGte512Lte1024> {
+    /// Supply additional algorithm-specific parameters to generate a key with.
     pub fn with_params(self, params: DsaParamsV1) -> BuilderWithParams<Dsa, DsaParamsV1> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -176,6 +213,7 @@ impl BuilderWithKeyBits<Dsa, KeyBitsGte512Lte1024> {
 }
 
 impl BuilderWithKeyBits<Dsa, KeyBitsGt1024Lte3072> {
+    /// Supply additional algorithm-specific parameters to generate a key with.
     pub fn with_params(self, params: DsaParamsV2) -> BuilderWithParams<Dsa, DsaParamsV2> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -185,7 +223,9 @@ impl BuilderWithKeyBits<Dsa, KeyBitsGt1024Lte3072> {
     }
 }
 
+/// Algorithm-specific parameters to generate a key with.
 pub enum BuilderOptions {
+    /// Parameters to be used with the DH algorithm. Specifies `modulus` and `generator` params.
     Dh(DhParams),
     Dsa(DsaParams),
 }
@@ -204,7 +244,12 @@ fn set_property(handle: BCRYPT_HANDLE, property: &str, value: &[u8]) -> Result<(
     Ok(())
 }
 
-pub trait BuilderParams {
+/// Marker type for additional algorithm-specific parameters.
+///
+/// The trait is sealed as it's only meant to be implemented by the types in
+/// this crate.
+pub trait BuilderParams: private::Sealed {
+    #[doc(hidden)]
     fn set_param(&self, _handle: BCRYPT_HANDLE, _key_bits: u32) -> Result<()> {
         Ok(())
     }
@@ -213,7 +258,7 @@ impl BuilderParams for () {}
 impl BuilderParams for BuilderOptions {
     fn set_param(&self, handle: BCRYPT_HANDLE, key_bits: u32) -> Result<()> {
         let (property, blob) = match self {
-            BuilderOptions::Dsa(params) => (BCRYPT_DSA_PARAMETERS, params.to_blob(key_bits)),
+            BuilderOptions::Dsa(params) => (BCRYPT_DSA_PARAMETERS, params.to_blob_bytes(key_bits)),
             BuilderOptions::Dh(params) => {
                 (BCRYPT_DH_PARAMETERS, params.to_blob(key_bits).into_bytes())
             }
@@ -235,7 +280,7 @@ impl BuilderParams for DhParams {
 
 impl BuilderParams for DsaParams {
     fn set_param(&self, handle: BCRYPT_HANDLE, key_bits: u32) -> Result<()> {
-        set_property(handle, BCRYPT_DSA_PARAMETERS, &self.to_blob(key_bits))
+        set_property(handle, BCRYPT_DSA_PARAMETERS, &self.to_blob_bytes(key_bits))
     }
 }
 
@@ -258,6 +303,7 @@ impl BuilderParams for DsaParamsV2 {
     }
 }
 
+/// Builder type with provided both key length and algorithm-specific parameters.
 pub struct BuilderWithParams<A: Algorithm, Params: BuilderParams = ()> {
     algorithm: A,
     key_bits: u32,
@@ -265,6 +311,7 @@ pub struct BuilderWithParams<A: Algorithm, Params: BuilderParams = ()> {
 }
 
 impl<A: Algorithm, P: BuilderParams> BuilderWithParams<A, P> {
+    /// Generate the final key.
     pub fn build(self) -> Result<AsymmetricKey<A, Private>> {
         let id = self.algorithm.id();
 
@@ -277,28 +324,40 @@ impl<A: Algorithm, P: BuilderParams> BuilderWithParams<A, P> {
     }
 }
 
-///
+/// Algorithm-specific DH parameters.
 #[derive(Debug)]
 pub struct DhParams {
-    modulus: Vec<u8>,
-    generator: Vec<u8>,
+    /// DH group modulus.
+    pub modulus: Vec<u8>,
+    /// DH group generator.
+    pub generator: Vec<u8>,
 }
 
+/// Algorithm-specific DH parameters.
 pub enum DsaParams {
+    /// Used with key of size in the `512..=1024` range.
     V1(DsaParamsV1),
+    /// Used with key of size in the `1024..=3072` range.
     V2(DsaParamsV2),
 }
 
+/// Algorithm-specific DSA parameters. Applies to keys with lesser or equal than
+/// 1024 bit length.
 pub struct DsaParamsV1 {
-    count: u32,
-    seed: [u8; 20], // big-endian
-    q: [u8; 20],    // big-endian
-    prime: Vec<u8>,
-    generator: Vec<u8>,
+    /// The number of iterations performed to generate the prime number `q` from the `seed`.
+    pub count: u32,
+    /// The seed value, in big-endian format, used to generate q.
+    pub seed: [u8; 20],
+    /// The 160-bit prime factor, in big-endian format.
+    pub q: [u8; 20],
+    /// DSA prime number, in big-endian format.
+    pub prime: Vec<u8>,
+    /// DSA generator number, in big-endian format.
+    pub generator: Vec<u8>,
 }
 
 impl DsaParams {
-    fn to_blob(&self, key_bits: u32) -> Box<[u8]> {
+    fn to_blob_bytes(&self, key_bits: u32) -> Box<[u8]> {
         match self {
             DsaParams::V1(params) => params.to_blob(key_bits).into_bytes(),
             DsaParams::V2(params) => params.to_blob(key_bits).into_bytes(),
@@ -306,6 +365,8 @@ impl DsaParams {
     }
 }
 
+/// Specifies the Federal Information Processing Standard (FIPS) to apply when
+/// used in conjuction with a DSA key of greater than 1024 bit length.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum FipsVersion {
@@ -313,6 +374,7 @@ pub enum FipsVersion {
     Fips186V3,
 }
 
+/// Specifies the hashing algorithm to use in the DSA key context.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum DsaHashAlgorithm {
@@ -321,14 +383,26 @@ pub enum DsaHashAlgorithm {
     Sha512,
 }
 
+/// Algorithm-specific DSA parameters. Applies to keys with greater than 1024
+/// bit length.
 pub struct DsaParamsV2 {
-    count: u32,
-    hash: DsaHashAlgorithm,
-    standard: FipsVersion,
-    seed_len: u32,
-    group_size: u32,
-    prime: Vec<u8>,
-    generator: Vec<u8>,
+    /// The number of iterations performed to generate the prime number q from
+    /// the seed. For more information, see NIST standard FIPS186-3.
+    pub count: u32,
+    /// Specifies the hashing algorithm to use.
+    pub hash: DsaHashAlgorithm,
+    /// Specifies the Federal Information Processing Standard (FIPS) to apply.
+    pub standard: FipsVersion,
+    /// Length of the seed used to generate the prime number q.
+    pub seed_len: u32,
+    /// Size of the prime number q. Currently, if the key is less than 128
+    /// bits, q is 20 bytes long. If the key exceeds 256 bits, q is 32 bytes
+    /// long.
+    pub group_size: u32,
+    /// DSA prime number, in big-endian format.
+    pub prime: Vec<u8>,
+    /// DSA generator number, in big-endian format.
+    pub generator: Vec<u8>,
 }
 
 impl DsaParamsV1 {
@@ -401,6 +475,7 @@ impl DhParams {
 }
 
 impl BuilderWithKeyBits<AsymmetricAlgorithmId> {
+    /// Generate the final key.
     pub fn build(self) -> Result<AsymmetricKey<AsymmetricAlgorithmId, Private>> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -412,6 +487,7 @@ impl BuilderWithKeyBits<AsymmetricAlgorithmId> {
 }
 
 impl BuilderWithKeyBits<Rsa> {
+    /// Generate the final key.
     pub fn build(self) -> Result<AsymmetricKey<Rsa, Private>> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -423,6 +499,7 @@ impl BuilderWithKeyBits<Rsa> {
 }
 
 impl BuilderWithKeyBits<Dsa> {
+    /// Generate the final key.
     pub fn build(self) -> Result<AsymmetricKey<Dsa, Private>> {
         BuilderWithParams {
             algorithm: self.algorithm,
@@ -528,12 +605,18 @@ impl KeyPairBuilder<'_> {
 
 use crate::blob;
 
-unsafe impl Pod for BCRYPT_DH_PARAMETER_HEADER {}
+unsafe impl Pod for BCRYPT_DSA_PARAMETER_HEADER {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_DSA_PARAMETER_HEADER`].
+    ///
+    /// [`BCRYPT_DSA_PARAMETER_HEADER`]: https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_parameter_header
     enum DsaParameter {},
     header: BCRYPT_DSA_PARAMETER_HEADER,
+    /// Dynamically-sized part of the [`DsaParameter`] blob.
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_parameter_header
+    ///
+    /// [`DsaParameter`]: enum.DsaParameter.html
     view: struct ref DsaParameterViewTail {
         prime[cbKeyLength],
         generator[cbKeyLength],
@@ -542,22 +625,34 @@ blob! {
 
 unsafe impl Pod for BCRYPT_DSA_PARAMETER_HEADER_V2 {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_DSA_PARAMETER_HEADER_V2`].
+    ///
+    /// [`BCRYPT_DSA_PARAMETER_HEADER_V2`]: https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_parameter_header_v2
     enum DsaParameterV2 {},
     header: BCRYPT_DSA_PARAMETER_HEADER_V2,
+    /// Dynamically-sized part of the [`DsaParameterV2`] blob.
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dsa_parameter_header
+    ///
+    /// [`DsaParameterV2`]: enum.DsaParameterV2.html
     view: struct ref DsaParameterV2ViewTail {
         prime[cbKeyLength],
         generator[cbKeyLength],
     }
 }
 
-unsafe impl Pod for BCRYPT_DSA_PARAMETER_HEADER {}
+unsafe impl Pod for BCRYPT_DH_PARAMETER_HEADER {}
 blob! {
+    /// Dynamic struct layout for [`BCRYPT_DH_PARAMETER_HEADER`].
+    ///
+    /// [`BCRYPT_DH_PARAMETER_HEADER`]: https://docs.microsoft.com/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_parameter_header
     enum DhParameter {},
     header: BCRYPT_DH_PARAMETER_HEADER,
+    /// Dynamically-sized part of the [`DhParameter`] blob.
+    ///
     /// All the fields are stored as a big-endian multiprecision integer.
-    /// See https://docs.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_dh_parameter_header
+    ///
+    /// [`DhParameter`]: enum.DhParameter.html
     view: struct ref DhParameterViewTail {
         modulus[cbKeyLength],
         generator[cbKeyLength],
@@ -620,4 +715,10 @@ mod tests {
 
         Ok(())
     }
+}
+
+mod private {
+    // https://rust-lang.github.io/api-guidelines/future-proofing.html#sealed-traits-protect-against-downstream-implementations-c-sealed
+    pub trait Sealed {}
+    impl<T> Sealed for T {}
 }

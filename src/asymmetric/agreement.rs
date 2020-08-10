@@ -52,6 +52,8 @@ impl Handle for SecretHandle {
 
 impl SecretHandle {
     /// Returns the little-endian representation of the raw secret without any modification.
+    ///
+    /// > **NOTE**: Supported only on Windows 10.
     pub fn derive_raw(&self) -> Result<Box<[u8]>> {
         // NOTE: Only supported on Windows 10
         let id = crate::helpers::WindowsString::from(BCRYPT_KDF_RAW_SECRET);

@@ -2,6 +2,24 @@
 //!
 //! A scheme to verify the authenticity of digital messages or documents using
 //! asymmetric cryptography.
+//!
+//! # Example
+//! ```
+//! use win_crypto_ng::asymmetric::signature::{Signer, Verifier, SignaturePadding};
+//! use win_crypto_ng::asymmetric::{AsymmetricKey, Rsa};
+//! use win_crypto_ng::hash::HashAlgorithmId;
+//!
+//! let key = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
+//!
+//! let data: Vec<u8> = (0..32).collect();
+//! let padding = SignaturePadding::pkcs1(HashAlgorithmId::Sha256);
+//! let signature = key.sign(&*data, Some(padding)).expect("Signing to succeed");
+//!
+//! key.verify(&data, &signature, Some(padding)).expect("Signature to be valid");
+//!
+//! key.verify(&[0xDE, 0xAD], &signature, Some(padding)).expect_err("Bad digest");
+//! key.verify(&data, &[0xDE, 0xAD], Some(padding)).expect_err("Bad signature");
+//! ```
 
 use crate::asymmetric::ecc::{NistP256, NistP384, NistP521};
 use crate::asymmetric::{AsymmetricKey, Dsa, Ecdsa, Private, Public, Rsa};
@@ -12,17 +30,15 @@ use crate::{Error, Result};
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
 
+/// Create a signature for a given payload using an asymmetric key.
 pub trait Signer {
     fn sign(&self, input: &[u8], padding: Option<SignaturePadding>) -> Result<Box<[u8]>>;
 }
 
+/// Verify a signature for a given input using an asymmetric key.
+#[rustfmt::skip]
 pub trait Verifier {
-    fn verify(
-        &self,
-        hash: &[u8],
-        signature: &[u8],
-        padding: Option<SignaturePadding>,
-    ) -> Result<()>;
+    fn verify(&self, data: &[u8], signature: &[u8], padding: Option<SignaturePadding>) -> Result<()>;
 }
 
 macro_rules! impl_sign_verify {
@@ -71,17 +87,18 @@ pub enum SignaturePadding {
 }
 
 impl SignaturePadding {
+    /// Shorthand for `SignaturePadding::Pkcs1(Pkcs1Padding { algorithm })`.
     pub fn pkcs1(algorithm: HashAlgorithmId) -> SignaturePadding {
         SignaturePadding::Pkcs1(Pkcs1Padding { algorithm })
     }
+
+    /// Shorthand for `SignaturePadding::Pss(PssPadding { algorithm, salt })`.
     pub fn pss(algorithm: HashAlgorithmId, salt: u32) -> SignaturePadding {
         SignaturePadding::Pss(PssPadding { algorithm, salt })
     }
 }
 
 /// PKCS #1 padding scheme.
-/// # More
-/// https://docs.microsoft.com/pl-pl/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_pkcs1_padding_info
 #[derive(Clone, Copy)]
 pub struct Pkcs1Padding {
     /// Hashing algorithm to be used to create the padding.
@@ -220,32 +237,30 @@ mod tests {
 
         let key = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
 
-        let digest: Vec<u8> = (0..32).collect();
+        let data: Vec<u8> = (0..32).collect();
         let padding = SignaturePadding::pkcs1(Sha256);
-        let signature = key
-            .sign(&*digest, Some(padding))
-            .expect("Signing to succeed");
-        key.verify(&digest, &signature, Some(padding))
+        let signature = key.sign(&*data, Some(padding)).expect("Signing to succeed");
+        key.verify(&data, &signature, Some(padding))
             .expect("Signature to be valid");
 
         key.verify(&[0xDE, 0xAD], &signature, Some(padding))
             .expect_err("Bad digest");
-        key.verify(&digest, &[0xDE, 0xAD], Some(padding))
+        key.verify(&data, &[0xDE, 0xAD], Some(padding))
             .expect_err("Bad signature");
         let padding_sha1 = SignaturePadding::pkcs1(Sha1);
         let padding_pss = SignaturePadding::pss(Sha256, 64);
-        key.verify(&digest, &signature, Some(padding_sha1))
+        key.verify(&data, &signature, Some(padding_sha1))
             .expect_err("Bad padding");
-        key.verify(&digest, &signature, Some(padding_pss))
+        key.verify(&data, &signature, Some(padding_pss))
             .expect_err("Bad padding");
 
         let key = AsymmetricKey::builder(Ecdsa(NistP256)).build().unwrap();
-        let signature = key.sign(&*digest, None).expect("Signing to succeed");
-        key.verify(&digest, &signature, None)
+        let signature = key.sign(&*data, None).expect("Signing to succeed");
+        key.verify(&data, &signature, None)
             .expect("Signature to be valid");
         key.verify(&[0xDE, 0xAD], &signature, None)
             .expect_err("Bad digest");
-        key.verify(&digest, &[0xDE, 0xAD], None)
+        key.verify(&data, &[0xDE, 0xAD], None)
             .expect_err("Bad signature");
     }
 }
