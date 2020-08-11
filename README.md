@@ -26,6 +26,11 @@ Windows, you already accepted to trust these primitives.
 - Thread safe
 
 ## Supported features in Rust
+- Asymmetric encryption (RSA)
+- Digital signatures
+  - Supported algorithms: RSA, DSA, ECDSA.
+- Key exchange
+  - Supported algorithms: DH, ECDH.
 - Symmetric encryption
   - Supported algorithms: AES, DES, DES-X, RC2, 3DES, 3DES-112.
   - Supported chaining modes: ECB, CBC, CFB.
@@ -36,6 +41,39 @@ Windows, you already accepted to trust these primitives.
 *More to come*
 
 ## Examples
+
+### Asymmetric encryption (RSA)
+
+```rust
+use win_crypto_ng::asymmetric::{AsymmetricKey, EncryptionPadding, Rsa};
+let key = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
+
+let plaintext = b"This is an important message.";
+
+let padding = Some(EncryptionPadding::Pkcs1);
+let ciphertext = key.encrypt(padding.clone(), &*plaintext).unwrap();
+assert_eq!(ciphertext.len(), 1024 / 8);
+let decoded = key.decrypt(padding, ciphertext.as_ref()).unwrap();
+assert_eq!(plaintext, decoded.as_ref());
+```
+
+### Digital signatures
+```rust
+use win_crypto_ng::asymmetric::signature::{Signer, Verifier, SignaturePadding};
+use win_crypto_ng::asymmetric::{AsymmetricKey, Rsa};
+use win_crypto_ng::hash::HashAlgorithmId;
+
+let key = AsymmetricKey::builder(Rsa).key_bits(1024).build().unwrap();
+
+let data: Vec<u8> = (0..32).collect();
+let padding = SignaturePadding::pkcs1(HashAlgorithmId::Sha256);
+let signature = key.sign(&*data, Some(padding)).expect("Signing to succeed");
+
+key.verify(&data, &signature, Some(padding)).expect("Signature to be valid");
+
+key.verify(&[0xDE, 0xAD], &signature, Some(padding)).expect_err("Bad digest");
+key.verify(&data, &[0xDE, 0xAD], Some(padding)).expect_err("Bad signature");
+```
 
 ### Symmetric encryption
 
