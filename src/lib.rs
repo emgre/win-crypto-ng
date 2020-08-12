@@ -5,13 +5,15 @@ use winapi::shared::ntstatus;
 use std::fmt;
 use std::num::NonZeroU32;
 
+pub mod asymmetric;
 pub mod buffer;
 pub mod hash;
+pub mod key_blob;
 pub mod property;
 pub mod random;
 pub mod symmetric;
 
-mod helpers;
+pub mod helpers;
 
 // Compile and test the README
 doctest!("../README.md");
@@ -24,12 +26,15 @@ doctest!("../README.md");
 pub enum Error {
     NotFound,
     InvalidParameter,
+    InvalidSignature,
     NoMemory,
     BufferTooSmall,
     InvalidHandle,
     NotSupported,
     AuthTagMismatch,
     InvalidBufferSize,
+    Unsuccessful,
+    BadData,
 
     Unknown(NTSTATUS),
 }
@@ -48,12 +53,19 @@ impl Error {
             ntstatus::STATUS_SUCCESS => Ok(()),
             ntstatus::STATUS_NOT_FOUND => Err(Error::NotFound),
             ntstatus::STATUS_INVALID_PARAMETER => Err(Error::InvalidParameter),
-            ntstatus::STATUS_NO_MEMORY => Err(Error::NoMemory),
+            ntstatus::STATUS_NO_MEMORY | winapi::shared::winerror::NTE_NO_MEMORY => {
+                Err(Error::NoMemory)
+            }
             ntstatus::STATUS_BUFFER_TOO_SMALL => Err(Error::BufferTooSmall),
             ntstatus::STATUS_INVALID_HANDLE => Err(Error::InvalidHandle),
+            ntstatus::STATUS_INVALID_SIGNATURE => Err(Error::InvalidSignature),
             ntstatus::STATUS_NOT_SUPPORTED => Err(Error::NotSupported),
             ntstatus::STATUS_AUTH_TAG_MISMATCH => Err(Error::AuthTagMismatch),
             ntstatus::STATUS_INVALID_BUFFER_SIZE => Err(Error::InvalidBufferSize),
+            ntstatus::STATUS_DATA_ERROR | winapi::shared::winerror::NTE_BAD_DATA => {
+                Err(Error::BadData)
+            }
+            ntstatus::STATUS_UNSUCCESSFUL => Err(Error::Unsuccessful),
             value => Err(Error::Unknown(value)),
         }
     }
@@ -66,9 +78,12 @@ impl Into<NonZeroU32> for Error {
             Error::InvalidParameter => ntstatus::STATUS_INVALID_PARAMETER,
             Error::BufferTooSmall => ntstatus::STATUS_BUFFER_TOO_SMALL,
             Error::InvalidHandle => ntstatus::STATUS_INVALID_HANDLE,
+            Error::InvalidSignature => ntstatus::STATUS_INVALID_SIGNATURE,
             Error::NotSupported => ntstatus::STATUS_NOT_SUPPORTED,
             Error::AuthTagMismatch => ntstatus::STATUS_AUTH_TAG_MISMATCH,
             Error::InvalidBufferSize => ntstatus::STATUS_INVALID_BUFFER_SIZE,
+            Error::BadData => ntstatus::STATUS_DATA_ERROR,
+            Error::Unsuccessful => ntstatus::STATUS_UNSUCCESSFUL,
             Error::NoMemory => ntstatus::STATUS_NO_MEMORY,
             Error::Unknown(value) => value,
         };
