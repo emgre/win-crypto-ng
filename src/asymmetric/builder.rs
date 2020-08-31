@@ -575,7 +575,6 @@ impl KeyPair {
             ))?;
         }
         let mut blob = vec![0u8; bytes as usize].into_boxed_slice();
-        eprintln!("Asked to allocate {} bytes", bytes);
 
         unsafe {
             Error::check(BCryptExportKey(
