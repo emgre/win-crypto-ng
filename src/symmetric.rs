@@ -49,6 +49,8 @@ use crate::buffer::Buffer;
 use crate::helpers::{AlgoHandle, Handle, KeyHandle, WindowsString};
 use crate::property::{self, BlockLength, KeyLength, KeyLengths, MessageBlockLength, ObjectLength};
 use crate::{Error, Result};
+use std::fmt;
+use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 use winapi::shared::bcrypt::*;
@@ -157,6 +159,168 @@ pub enum Padding {
     /// N.B. Data equal in length to the block size will be padded to the *next*
     /// block size.
     Block,
+}
+
+/// Marker trait for a symmetric algorithm.
+pub trait Algorithm {
+    const ID: Option<SymmetricAlgorithmId>;
+
+    fn id(&self) -> SymmetricAlgorithmId;
+}
+
+impl Algorithm for SymmetricAlgorithmId {
+    const ID: Option<SymmetricAlgorithmId> = None;
+    fn id(&self) -> SymmetricAlgorithmId {
+        *self
+    }
+}
+
+/// The advanced encryption standard symmetric encryption algorithm.
+///
+/// Standard: FIPS 197
+pub struct Aes;
+impl Algorithm for Aes {
+    const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::Aes);
+    fn id(&self) -> SymmetricAlgorithmId {
+        SymmetricAlgorithmId::Aes
+    }
+}
+/// The data encryption standard symmetric encryption algorithm.
+///
+/// Standard: FIPS 46-3, FIPS 81.
+pub struct Des;
+impl Algorithm for Des {
+    const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::Des);
+    fn id(&self) -> SymmetricAlgorithmId {
+        SymmetricAlgorithmId::Des
+    }
+}
+/// The extended data encryption standard symmetric encryption algorithm.
+///
+/// Standard: None.
+pub struct DesX;
+impl Algorithm for DesX {
+    const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::DesX);
+    fn id(&self) -> SymmetricAlgorithmId {
+        SymmetricAlgorithmId::DesX
+    }
+}
+/// The RC2 block symmetric encryption algorithm.
+///
+/// Standard: RFC 2268.
+pub struct Rc2;
+impl Algorithm for Rc2 {
+    const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::Rc2);
+    fn id(&self) -> SymmetricAlgorithmId {
+        SymmetricAlgorithmId::Rc2
+    }
+}
+/// The triple data encryption standard symmetric encryption algorithm.
+///
+/// Standard: SP800-67, SP800-38A.
+pub struct TripleDes;
+impl Algorithm for TripleDes {
+    const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::TripleDes);
+    fn id(&self) -> SymmetricAlgorithmId {
+        SymmetricAlgorithmId::TripleDes
+    }
+}
+/// The 112-bit triple data encryption standard symmetric encryption algorithm.
+///
+/// Standard: SP800-67, SP800-38A.
+pub struct TripleDes112;
+impl Algorithm for TripleDes112 {
+    const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::TripleDes112);
+    fn id(&self) -> SymmetricAlgorithmId {
+        SymmetricAlgorithmId::TripleDes112
+    }
+}
+
+/// Handle to a symmetric key.
+pub struct Key<A: Algorithm> {
+    handle: KeyHandle,
+    _object: Buffer,
+    _marker: PhantomData<A>,
+}
+
+impl<A: Algorithm> fmt::Debug for Key<A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Key<{}> {{ ... }}",
+            A::ID.map(|x| x.to_str()).unwrap_or_default()
+        )
+    }
+}
+
+impl<A: Algorithm> core::convert::TryFrom<SymmetricAlgorithmKey> for Key<A> {
+    type Error = SymmetricAlgorithmKey;
+
+    fn try_from(value: SymmetricAlgorithmKey) -> Result<Self, Self::Error> {
+        let name = value
+            .handle
+            .get_property_unsized::<property::AlgorithmName>()
+            .expect("Key to always know its algorithm name");
+        let name = WindowsString::from_bytes_with_nul(Vec::from(name).into()).unwrap();
+
+        let id = A::ID
+            .map(SymmetricAlgorithmId::to_str)
+            .map(WindowsString::from)
+            .unwrap_or_else(WindowsString::new);
+
+        if name == id {
+            Ok(Self {
+                handle: value.handle,
+                _object: value._object,
+                _marker: PhantomData,
+            })
+        } else {
+            Err(value)
+        }
+    }
+}
+
+impl<A: Algorithm> AsRef<SymmetricAlgorithmKey> for Key<A> {
+    fn as_ref(&self) -> &SymmetricAlgorithmKey {
+        // FIXME:
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
+impl<A: Algorithm> Key<A> {
+    pub fn as_erased(self) -> SymmetricAlgorithmKey {
+        SymmetricAlgorithmKey {
+            handle: self.handle,
+            _object: self._object,
+        }
+    }
+}
+
+impl<A: Algorithm> Clone for Key<A> {
+    fn clone(&self) -> Self {
+        let mut handle = KeyHandle::new();
+        let mut _object = Vec::with_capacity(self._object.len());
+
+        unsafe {
+            Error::check(BCryptDuplicateKey(
+                self.handle.as_ptr(),
+                handle.as_mut_ptr(),
+                _object.as_mut_slice().as_mut_ptr(),
+                _object.capacity() as u32,
+                0,
+            ))
+        }
+        .expect(
+            "CNG to succesfully duplicate a previously successfully created key
+            object",
+        );
+
+        Self {
+            handle,
+            _object: Buffer::from_vec(_object),
+            _marker: PhantomData,
+        }
+    }
 }
 
 /// Symmetric algorithm
@@ -471,6 +635,79 @@ impl SymmetricAlgorithmKey {
     }
 }
 
+#[cfg(feature = "block-cipher-trait")]
+pub use block_cipher;
+#[cfg(feature = "block-cipher-trait")]
+mod block_cipher_trait {
+    use super::*;
+
+    use core::convert::TryFrom;
+
+    use block_cipher::generic_array::{typenum, GenericArray};
+    use block_cipher::InvalidKeyLength;
+    use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
+
+    impl NewBlockCipher for super::Key<Aes> {
+        /// Key size in bytes with which cipher guaranteed to be initialized.
+        type KeySize = typenum::U16;
+
+        /// Create new block cipher instance from key with fixed size.
+        fn new(key: &Key<Self>) -> Self {
+            let prov =
+                SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Ecb).unwrap();
+            let key = prov.new_key(key).unwrap();
+            match Self::try_from(key) {
+                Ok(value) => value,
+                Err(..) => panic!(),
+            }
+        }
+
+        /// Create new block cipher instance from key with variable size.
+        ///
+        /// Default implementation will accept only keys with length equal to
+        /// `KeySize`, but some ciphers can accept range of key lengths.
+        fn new_varkey(key: &[u8]) -> Result<Self, InvalidKeyLength> {
+            use typenum::marker_traits::Unsigned;
+
+            if key.len() != Self::KeySize::to_usize() {
+                Err(InvalidKeyLength)
+            } else {
+                Ok(Self::new(GenericArray::from_slice(key)))
+            }
+        }
+    }
+
+    impl BlockCipher for super::Key<Aes> {
+        /// Size of the block in bytes
+        type BlockSize = typenum::U16;
+
+        /// Number of blocks which can be processed in parallel by
+        /// cipher implementation
+        /// TODO:
+        type ParBlocks = typenum::U1;
+
+        /// Encrypt block in-place
+        fn encrypt_block(&self, block: &mut Block<Self>) {
+            // FIXME: We assume here that we use ECB (as initialized via the
+            // NewBlockCipher trait)
+            // FIXME: Adapt the implementation to use the in-place one
+            let buf = self.as_ref().encrypt(None, block.as_slice(), None).unwrap();
+            let mut buf = buf.into_inner();
+            block[..].copy_from_slice(buf.as_mut_slice());
+        }
+
+        /// Decrypt block in-place
+        fn decrypt_block(&self, block: &mut Block<Self>) {
+            // FIXME: We assume here that we use ECB (as initialized via the
+            // NewBlockCipher trait)
+            // FIXME: Adapt the implementation to use the in-place one
+            let buf = self.as_ref().decrypt(None, block.as_slice(), None).unwrap();
+            let mut buf = buf.into_inner();
+            block[..].copy_from_slice(buf.as_mut_slice());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -581,5 +818,29 @@ mod tests {
         assert_eq!(data, &plaintext.as_slice()[..data.len()]);
         assert_eq!(secret.len() * 8, key.key_size().unwrap());
         assert_eq!(expected_block_size, key.block_size().unwrap());
+    }
+
+    #[cfg(feature = "block-cipher-trait")]
+    #[test]
+    fn cipher_trait() {
+        use core::convert::TryFrom;
+
+        let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Ecb).unwrap();
+        let key = algo.new_key(SECRET.as_bytes()).unwrap();
+
+        let key = match Key::<Rc2>::try_from(key) {
+            Ok(..) => panic!(),
+            Err(value) => value,
+        };
+
+        let typed = match Key::<Aes>::try_from(key) {
+            Ok(value) => value,
+            Err(..) => panic!(),
+        };
+
+        use block_cipher::{generic_array::GenericArray, BlockCipher};
+        let mut data = DATA.as_bytes()[..16].to_owned();
+        typed.encrypt_block(GenericArray::from_mut_slice(data.as_mut()));
+        typed.decrypt_block(GenericArray::from_mut_slice(data.as_mut()));
     }
 }
