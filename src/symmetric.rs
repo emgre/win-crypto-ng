@@ -245,8 +245,7 @@ impl KeyBits for () {}
 
 /// Handle to a symmetric key.
 pub struct Key<A: Algorithm, B: KeyBits = ()> {
-    handle: KeyHandle,
-    _object: Buffer,
+    inner: SymmetricAlgorithmKey,
     _algo: PhantomData<A>,
     _bits: PhantomData<B>,
 }
@@ -279,8 +278,7 @@ impl<A: Algorithm, B: KeyBits> core::convert::TryFrom<SymmetricAlgorithmKey> for
         let key_size = value.key_size().expect("Key to know its length");
         if name == id && B::VALUE.map_or(true, |len| len == key_size) {
             Ok(Self {
-                handle: value.handle,
-                _object: value._object,
+                inner: value,
                 _algo: PhantomData,
                 _bits: PhantomData,
             })
@@ -292,28 +290,25 @@ impl<A: Algorithm, B: KeyBits> core::convert::TryFrom<SymmetricAlgorithmKey> for
 
 impl<A: Algorithm, B: KeyBits> AsRef<SymmetricAlgorithmKey> for Key<A, B> {
     fn as_ref(&self) -> &SymmetricAlgorithmKey {
-        // FIXME:
-        unsafe { std::mem::transmute(self) }
+        &self.inner
     }
 }
 
 impl<A: Algorithm, B: KeyBits> Key<A, B> {
-    pub fn as_erased(self) -> SymmetricAlgorithmKey {
-        SymmetricAlgorithmKey {
-            handle: self.handle,
-            _object: self._object,
-        }
+    /// Discards type-level information and returns a dynamic key handle.
+    pub fn into_erased(self) -> SymmetricAlgorithmKey {
+        self.inner
     }
 }
 
 impl<A: Algorithm, B: KeyBits> Clone for Key<A, B> {
     fn clone(&self) -> Self {
         let mut handle = KeyHandle::new();
-        let mut _object = Vec::with_capacity(self._object.len());
+        let mut _object = Vec::with_capacity(self.inner._object.len());
 
         unsafe {
             Error::check(BCryptDuplicateKey(
-                self.handle.as_ptr(),
+                self.inner.handle.as_ptr(),
                 handle.as_mut_ptr(),
                 _object.as_mut_slice().as_mut_ptr(),
                 _object.capacity() as u32,
@@ -326,8 +321,10 @@ impl<A: Algorithm, B: KeyBits> Clone for Key<A, B> {
         );
 
         Self {
-            handle,
-            _object: Buffer::from_vec(_object),
+            inner: SymmetricAlgorithmKey {
+                handle,
+                _object: Buffer::from_vec(_object),
+            },
             _algo: PhantomData,
             _bits: PhantomData,
         }
