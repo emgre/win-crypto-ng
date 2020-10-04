@@ -236,14 +236,22 @@ impl Algorithm for TripleDes112 {
     }
 }
 
+/// Marker trait denoting key size in bits.
+pub trait KeyBits {
+    /// Value known at compile-time, `None` if only known at run-time.
+    const VALUE: Option<usize> = None;
+}
+impl KeyBits for () {}
+
 /// Handle to a symmetric key.
-pub struct Key<A: Algorithm> {
+pub struct Key<A: Algorithm, B: KeyBits = ()> {
     handle: KeyHandle,
     _object: Buffer,
-    _marker: PhantomData<A>,
+    _algo: PhantomData<A>,
+    _bits: PhantomData<B>,
 }
 
-impl<A: Algorithm> fmt::Debug for Key<A> {
+impl<A: Algorithm, B: KeyBits> fmt::Debug for Key<A, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -253,7 +261,7 @@ impl<A: Algorithm> fmt::Debug for Key<A> {
     }
 }
 
-impl<A: Algorithm> core::convert::TryFrom<SymmetricAlgorithmKey> for Key<A> {
+impl<A: Algorithm, B: KeyBits> core::convert::TryFrom<SymmetricAlgorithmKey> for Key<A, B> {
     type Error = SymmetricAlgorithmKey;
 
     fn try_from(value: SymmetricAlgorithmKey) -> Result<Self, Self::Error> {
@@ -268,11 +276,13 @@ impl<A: Algorithm> core::convert::TryFrom<SymmetricAlgorithmKey> for Key<A> {
             .map(WindowsString::from)
             .unwrap_or_else(WindowsString::new);
 
-        if name == id {
+        let key_size = value.key_size().expect("Key to know its length");
+        if name == id && B::VALUE.map_or(true, |len| len == key_size) {
             Ok(Self {
                 handle: value.handle,
                 _object: value._object,
-                _marker: PhantomData,
+                _algo: PhantomData,
+                _bits: PhantomData,
             })
         } else {
             Err(value)
@@ -280,14 +290,14 @@ impl<A: Algorithm> core::convert::TryFrom<SymmetricAlgorithmKey> for Key<A> {
     }
 }
 
-impl<A: Algorithm> AsRef<SymmetricAlgorithmKey> for Key<A> {
+impl<A: Algorithm, B: KeyBits> AsRef<SymmetricAlgorithmKey> for Key<A, B> {
     fn as_ref(&self) -> &SymmetricAlgorithmKey {
         // FIXME:
         unsafe { std::mem::transmute(self) }
     }
 }
 
-impl<A: Algorithm> Key<A> {
+impl<A: Algorithm, B: KeyBits> Key<A, B> {
     pub fn as_erased(self) -> SymmetricAlgorithmKey {
         SymmetricAlgorithmKey {
             handle: self.handle,
@@ -296,7 +306,7 @@ impl<A: Algorithm> Key<A> {
     }
 }
 
-impl<A: Algorithm> Clone for Key<A> {
+impl<A: Algorithm, B: KeyBits> Clone for Key<A, B> {
     fn clone(&self) -> Self {
         let mut handle = KeyHandle::new();
         let mut _object = Vec::with_capacity(self._object.len());
@@ -318,7 +328,8 @@ impl<A: Algorithm> Clone for Key<A> {
         Self {
             handle,
             _object: Buffer::from_vec(_object),
-            _marker: PhantomData,
+            _algo: PhantomData,
+            _bits: PhantomData,
         }
     }
 }
@@ -643,13 +654,43 @@ mod block_cipher_trait {
 
     use core::convert::TryFrom;
 
-    use block_cipher::generic_array::{typenum, GenericArray};
-    use block_cipher::InvalidKeyLength;
+    use block_cipher::generic_array::{
+        typenum::{self, Unsigned},
+        ArrayLength,
+    };
     use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
 
-    impl NewBlockCipher for super::Key<Aes> {
+    impl KeyBits for typenum::U128 {
+        const VALUE: Option<usize> = Some(Self::USIZE);
+    }
+    impl KeyBits for typenum::U192 {
+        const VALUE: Option<usize> = Some(Self::USIZE);
+    }
+    impl KeyBits for typenum::U256 {
+        const VALUE: Option<usize> = Some(Self::USIZE);
+    }
+
+    #[test]
+    fn assert_aes_keysize_valid() {
+        fn _inner<T: NewBlockCipher>() {}
+        _inner::<super::Key<Aes, typenum::U128>>();
+        _inner::<super::Key<Aes, typenum::U192>>();
+        _inner::<super::Key<Aes, typenum::U256>>();
+    }
+
+    impl<B: KeyBits> NewBlockCipher for super::Key<Aes, B>
+    where
+        B: typenum::Unsigned,
+        // Fancy way of allowing only {128, 192, 256}
+        B: typenum::IsGreaterOrEqual<typenum::U128, Output = typenum::B1>,
+        B: typenum::IsLessOrEqual<typenum::U256, Output = typenum::B1>,
+        B: typenum::PartialDiv<typenum::U64>,
+        // Help the trait solver see that it's also divisible by 8
+        B: typenum::PartialDiv<typenum::U8>,
+        <B as typenum::PartialDiv<typenum::U8>>::Output: ArrayLength<u8>,
+    {
         /// Key size in bytes with which cipher guaranteed to be initialized.
-        type KeySize = typenum::U16;
+        type KeySize = <B as typenum::PartialDiv<typenum::U8>>::Output;
 
         /// Create new block cipher instance from key with fixed size.
         fn new(key: &Key<Self>) -> Self {
@@ -661,29 +702,14 @@ mod block_cipher_trait {
                 Err(..) => panic!(),
             }
         }
-
-        /// Create new block cipher instance from key with variable size.
-        ///
-        /// Default implementation will accept only keys with length equal to
-        /// `KeySize`, but some ciphers can accept range of key lengths.
-        fn new_varkey(key: &[u8]) -> Result<Self, InvalidKeyLength> {
-            use typenum::marker_traits::Unsigned;
-
-            if key.len() != Self::KeySize::to_usize() {
-                Err(InvalidKeyLength)
-            } else {
-                Ok(Self::new(GenericArray::from_slice(key)))
-            }
-        }
     }
 
-    impl BlockCipher for super::Key<Aes> {
+    impl<B: KeyBits> BlockCipher for super::Key<Aes, B> {
         /// Size of the block in bytes
         type BlockSize = typenum::U16;
 
         /// Number of blocks which can be processed in parallel by
         /// cipher implementation
-        /// TODO:
         type ParBlocks = typenum::U1;
 
         /// Encrypt block in-place
@@ -842,5 +868,40 @@ mod tests {
         let mut data = DATA.as_bytes()[..16].to_owned();
         typed.encrypt_block(GenericArray::from_mut_slice(data.as_mut()));
         typed.decrypt_block(GenericArray::from_mut_slice(data.as_mut()));
+    }
+
+    #[cfg(feature = "block-cipher-trait")]
+    #[test]
+    fn marker_bits() {
+        use block_cipher::generic_array::typenum;
+        use core::convert::TryFrom;
+
+        let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Ecb).unwrap();
+
+        let key = algo.new_key(b"123456789012345678901234").unwrap();
+        if let Ok(..) = Key::<Aes, typenum::U128>::try_from(key) {
+            panic!();
+        }
+        let key = algo.new_key(b"123456789012345678901234").unwrap();
+        if let Ok(..) = Key::<Aes, typenum::U256>::try_from(key) {
+            panic!();
+        }
+        let key = algo.new_key(b"123456789012345678901234").unwrap();
+        if let Err(..) = Key::<Aes, typenum::U192>::try_from(key) {
+            panic!();
+        }
+        // Test 256 bit keys
+        let key = algo.new_key(b"12345678901234567890123456789012").unwrap();
+        if let Ok(..) = Key::<Aes, typenum::U128>::try_from(key) {
+            panic!();
+        }
+        let key = algo.new_key(b"12345678901234567890123456789012").unwrap();
+        if let Ok(..) = Key::<Aes, typenum::U192>::try_from(key) {
+            panic!();
+        }
+        let key = algo.new_key(b"12345678901234567890123456789012").unwrap();
+        if let Err(..) = Key::<Aes, typenum::U256>::try_from(key) {
+            panic!();
+        }
     }
 }
