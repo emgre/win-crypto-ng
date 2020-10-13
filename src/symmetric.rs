@@ -667,14 +667,6 @@ mod block_cipher_trait {
         const VALUE: Option<usize> = Some(Self::USIZE);
     }
 
-    #[test]
-    fn assert_aes_keysize_valid() {
-        fn _inner<T: NewBlockCipher>() {}
-        _inner::<super::Key<Aes, typenum::U128>>();
-        _inner::<super::Key<Aes, typenum::U192>>();
-        _inner::<super::Key<Aes, typenum::U256>>();
-    }
-
     impl<B: KeyBits> NewBlockCipher for super::Key<Aes, B>
     where
         B: typenum::Unsigned,
@@ -841,6 +833,15 @@ mod tests {
         assert_eq!(data, &plaintext.as_slice()[..data.len()]);
         assert_eq!(secret.len() * 8, key.key_size().unwrap());
         assert_eq!(expected_block_size, key.block_size().unwrap());
+    }
+
+    #[cfg(feature = "block-cipher-trait")]
+    fn _assert_aes_keysize_valid() {
+        use block_cipher::{generic_array::typenum, NewBlockCipher};
+        fn _assert_trait_impl<T: NewBlockCipher>() {}
+        _assert_trait_impl::<super::Key<Aes, typenum::U128>>();
+        _assert_trait_impl::<super::Key<Aes, typenum::U192>>();
+        _assert_trait_impl::<super::Key<Aes, typenum::U256>>();
     }
 
     #[cfg(feature = "block-cipher-trait")]
