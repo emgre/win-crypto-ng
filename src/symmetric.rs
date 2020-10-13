@@ -643,9 +643,9 @@ impl SymmetricAlgorithmKey {
     }
 }
 
-#[cfg(feature = "block-cipher-trait")]
+#[cfg(feature = "block-cipher")]
 pub use block_cipher;
-#[cfg(feature = "block-cipher-trait")]
+#[cfg(feature = "block-cipher")]
 mod block_cipher_trait {
     use super::*;
 
@@ -835,7 +835,7 @@ mod tests {
         assert_eq!(expected_block_size, key.block_size().unwrap());
     }
 
-    #[cfg(feature = "block-cipher-trait")]
+    #[cfg(feature = "block-cipher")]
     fn _assert_aes_keysize_valid() {
         use block_cipher::{generic_array::typenum, NewBlockCipher};
         fn _assert_trait_impl<T: NewBlockCipher>() {}
@@ -844,7 +844,7 @@ mod tests {
         _assert_trait_impl::<super::Key<Aes, typenum::U256>>();
     }
 
-    #[cfg(feature = "block-cipher-trait")]
+    #[cfg(feature = "block-cipher")]
     #[test]
     fn cipher_trait() {
         use core::convert::TryFrom;
@@ -868,7 +868,7 @@ mod tests {
         typed.decrypt_block(GenericArray::from_mut_slice(data.as_mut()));
     }
 
-    #[cfg(feature = "block-cipher-trait")]
+    #[cfg(feature = "block-cipher")]
     #[test]
     fn marker_bits() {
         use block_cipher::generic_array::typenum;

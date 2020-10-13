@@ -27,7 +27,6 @@ doc-comment = "0.3"
 [features]
 default = ["zeroize"]
 rand = ["rand_core"]
-block-cipher-trait = ["block-cipher"]
 
 [package.metadata.docs.rs]
 default-target = "x86_64-pc-windows-msvc"
