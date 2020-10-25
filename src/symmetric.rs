@@ -714,8 +714,8 @@ mod block_cipher_trait {
         }
     }
 
-    use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
     use block_cipher::generic_array::{typenum, ArrayLength};
+    use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
 
     impl<T: typenum::Unsigned> KeyBits for T {
         const VALUE: Option<usize> = Some(Self::USIZE);
