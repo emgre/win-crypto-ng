@@ -662,7 +662,7 @@ mod block_cipher_trait {
     };
     use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
 
-    impl<T> KeyBits for T where T: typenum::Unsigned {
+    impl<T: typenum::Unsigned> KeyBits for T {
         const VALUE: Option<usize> = Some(Self::USIZE);
     }
 
