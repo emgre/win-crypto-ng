@@ -241,10 +241,15 @@ pub trait KeyBits {
     /// Value known at compile-time, `None` if only known at run-time.
     const VALUE: Option<usize> = None;
 }
-impl KeyBits for () {}
+/// Key length known at run-time.
+pub struct DynamicKeyBits;
+
+impl KeyBits for DynamicKeyBits {
+    const VALUE: Option<usize> = None;
+}
 
 /// Handle to a symmetric key.
-pub struct Key<A: Algorithm, B: KeyBits = ()> {
+pub struct Key<A: Algorithm, B: KeyBits = DynamicKeyBits> {
     inner: SymmetricAlgorithmKey,
     _algo: PhantomData<A>,
     _bits: PhantomData<B>,
@@ -652,18 +657,12 @@ mod block_cipher_trait {
     use core::convert::TryFrom;
 
     use block_cipher::generic_array::{
-        typenum::{self, Unsigned},
+        typenum::{self},
         ArrayLength,
     };
     use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
 
-    impl KeyBits for typenum::U128 {
-        const VALUE: Option<usize> = Some(Self::USIZE);
-    }
-    impl KeyBits for typenum::U192 {
-        const VALUE: Option<usize> = Some(Self::USIZE);
-    }
-    impl KeyBits for typenum::U256 {
+    impl<T> KeyBits for T where T: typenum::Unsigned {
         const VALUE: Option<usize> = Some(Self::USIZE);
     }
 
