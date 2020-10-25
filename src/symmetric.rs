@@ -443,6 +443,12 @@ pub struct SymmetricAlgorithmKey {
     _object: Buffer,
 }
 
+impl fmt::Debug for SymmetricAlgorithmKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SymmetricAlgorithmKey {{ ... }}")
+    }
+}
+
 impl SymmetricAlgorithmKey {
     /// Returns the key value size in bits.
     ///
@@ -651,22 +657,71 @@ impl SymmetricAlgorithmKey {
 #[cfg(feature = "block-cipher")]
 pub use block_cipher;
 #[cfg(feature = "block-cipher")]
+pub use block_cipher_trait::BlockCipherKey;
+#[cfg(feature = "block-cipher")]
 mod block_cipher_trait {
     use super::*;
-
     use core::convert::TryFrom;
 
-    use block_cipher::generic_array::{
-        typenum::{self},
-        ArrayLength,
-    };
+    /// Helper struct that implements `block_cipher::BlockCipher` trait.
+    ///
+    /// Windows CNG API allows to create symmetric cipher keys with chaining
+    /// modes predefined. Because `BlockCipher` trait is only concerned with the
+    /// underlying cipher op (and which can be further used to compose chaining
+    /// mode on top of), we need to make sure that the inherent chaining mode is
+    /// set to ECB (which can be thought of as having no chaining mode).
+    pub struct BlockCipherKey<A: Algorithm, B: KeyBits> {
+        key: super::Key<A, B>,
+        _algo: PhantomData<A>,
+        _bits: PhantomData<B>,
+    }
+
+    impl<A: Algorithm, B: KeyBits> BlockCipherKey<A, B> {
+        pub fn into_key(self) -> super::Key<A, B> {
+            self.key
+        }
+    }
+
+    impl<A: Algorithm, B: KeyBits> super::Key<A, B> {
+        /// Returns a helper type that implements [`block_cipher::BlockCipher`] trait.
+        ///
+        /// Returns `Ok` iff the underlying key is set to ECB chaining mode, see
+        /// [`BlockCipherKey`] for more details.
+        ///
+        /// [`BlockCipherKey`]: struct.BlockCipherKey.html
+        /// [`block_cipher::BlockCipher`]: ../../block_cipher/trait.BlockCipher.html
+        pub fn try_into_block_cipher(self) -> Result<BlockCipherKey<A, B>, Self> {
+            let name = self
+                .inner
+                .handle
+                .get_property_unsized::<property::ChainingMode>()
+                .expect("Key to always know its algorithm name");
+            // Unfortunately Windows sometimes insists on returning concatenated
+            // identifiers with \0 in between (so we decode it manually),
+            // for example: ChainingModeECB\u{0}ChainingModeCBC\u{0}".
+            let mode: String = std::char::decode_utf16(name.iter().cloned())
+                .map(|c| c.unwrap_or(std::char::REPLACEMENT_CHARACTER))
+                .collect();
+            if mode.starts_with(ChainingMode::Ecb.to_str()) {
+                Ok(BlockCipherKey {
+                    key: self,
+                    _algo: PhantomData,
+                    _bits: PhantomData,
+                })
+            } else {
+                Err(self)
+            }
+        }
+    }
+
     use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
+    use block_cipher::generic_array::{typenum, ArrayLength};
 
     impl<T: typenum::Unsigned> KeyBits for T {
         const VALUE: Option<usize> = Some(Self::USIZE);
     }
 
-    impl<B: KeyBits> NewBlockCipher for super::Key<Aes, B>
+    impl<B: KeyBits> NewBlockCipher for BlockCipherKey<Aes, B>
     where
         B: typenum::Unsigned,
         // Fancy way of allowing only {128, 192, 256}
@@ -682,17 +737,23 @@ mod block_cipher_trait {
 
         /// Create new block cipher instance from key with fixed size.
         fn new(key: &Key<Self>) -> Self {
-            let prov =
-                SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Ecb).unwrap();
+            // NOTE: We specifically use ECB chaining mode coupled with empty IV
+            // (in subsequent `{encrypt, decrypt}_block` impls) to provide a
+            // transparent block cipher provided by the CNG API.
+            let prov = SymmetricAlgorithm::open(Aes.id(), ChainingMode::Ecb).unwrap();
             let key = prov.new_key(key).unwrap();
-            match Self::try_from(key) {
-                Ok(value) => value,
+            match super::Key::try_from(key) {
+                Ok(key) => Self {
+                    key,
+                    _algo: PhantomData,
+                    _bits: PhantomData,
+                },
                 Err(..) => panic!(),
             }
         }
     }
 
-    impl<B: KeyBits> BlockCipher for super::Key<Aes, B> {
+    impl<B: KeyBits> BlockCipher for BlockCipherKey<Aes, B> {
         /// Size of the block in bytes
         type BlockSize = typenum::U16;
 
@@ -702,20 +763,22 @@ mod block_cipher_trait {
 
         /// Encrypt block in-place
         fn encrypt_block(&self, block: &mut Block<Self>) {
-            // FIXME: We assume here that we use ECB (as initialized via the
-            // NewBlockCipher trait)
+            // NOTE: We check that chaining mode is already ECB in
+            // either `NewBlockCipher` or `try_into_block_cipher`.
             // FIXME: Adapt the implementation to use the in-place one
-            let buf = self.as_ref().encrypt(None, block.as_slice(), None).unwrap();
+            let key = self.key.as_ref();
+            let buf = key.encrypt(None, block.as_slice(), None).unwrap();
             let mut buf = buf.into_inner();
             block[..].copy_from_slice(buf.as_mut_slice());
         }
 
         /// Decrypt block in-place
         fn decrypt_block(&self, block: &mut Block<Self>) {
-            // FIXME: We assume here that we use ECB (as initialized via the
-            // NewBlockCipher trait)
+            // NOTE: We check that chaining mode is already ECB in
+            // either `NewBlockCipher` or `try_into_block_cipher`.
             // FIXME: Adapt the implementation to use the in-place one
-            let buf = self.as_ref().decrypt(None, block.as_slice(), None).unwrap();
+            let key = self.key.as_ref();
+            let buf = key.decrypt(None, block.as_slice(), None).unwrap();
             let mut buf = buf.into_inner();
             block[..].copy_from_slice(buf.as_mut_slice());
         }
@@ -838,9 +901,9 @@ mod tests {
     fn _assert_aes_keysize_valid() {
         use block_cipher::{generic_array::typenum, NewBlockCipher};
         fn _assert_trait_impl<T: NewBlockCipher>() {}
-        _assert_trait_impl::<super::Key<Aes, typenum::U128>>();
-        _assert_trait_impl::<super::Key<Aes, typenum::U192>>();
-        _assert_trait_impl::<super::Key<Aes, typenum::U256>>();
+        _assert_trait_impl::<BlockCipherKey<Aes, typenum::U128>>();
+        _assert_trait_impl::<BlockCipherKey<Aes, typenum::U192>>();
+        _assert_trait_impl::<BlockCipherKey<Aes, typenum::U256>>();
     }
 
     #[cfg(feature = "block-cipher")]
@@ -851,16 +914,9 @@ mod tests {
         let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Ecb).unwrap();
         let key = algo.new_key(SECRET.as_bytes()).unwrap();
 
-        let key = match Key::<Rc2>::try_from(key) {
-            Ok(..) => panic!(),
-            Err(value) => value,
-        };
+        let typed = Key::<Aes>::try_from(key).unwrap();
 
-        let typed = match Key::<Aes>::try_from(key) {
-            Ok(value) => value,
-            Err(..) => panic!(),
-        };
-
+        let typed = typed.try_into_block_cipher().unwrap();
         use block_cipher::{generic_array::GenericArray, BlockCipher};
         let mut data = DATA.as_bytes()[..16].to_owned();
         typed.encrypt_block(GenericArray::from_mut_slice(data.as_mut()));
