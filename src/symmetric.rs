@@ -676,6 +676,16 @@ mod block_cipher_trait {
         _bits: PhantomData<B>,
     }
 
+    impl<A: Algorithm, B: KeyBits> Clone for BlockCipherKey<A, B> {
+        fn clone(&self) -> Self {
+            BlockCipherKey {
+                key: self.key.clone(),
+                _algo: PhantomData,
+                _bits: PhantomData,
+            }
+        }
+    }
+
     impl<A: Algorithm, B: KeyBits> BlockCipherKey<A, B> {
         pub fn into_key(self) -> super::Key<A, B> {
             self.key
