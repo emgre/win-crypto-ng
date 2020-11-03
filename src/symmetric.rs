@@ -695,8 +695,8 @@ mod block_cipher_trait {
     impl<A: Algorithm, B: KeyBits> super::Key<A, B> {
         /// Returns a helper type that implements [`block_cipher::BlockCipher`] trait.
         ///
-        /// Returns `Ok` iff the underlying key is set to ECB chaining mode, see
-        /// [`BlockCipherKey`] for more details.
+        /// Returns `Ok` if and only if the underlying key is set to ECB
+        /// chaining mode, see [`BlockCipherKey`] for more details.
         ///
         /// [`BlockCipherKey`]: struct.BlockCipherKey.html
         /// [`block_cipher::BlockCipher`]: ../../block_cipher/trait.BlockCipher.html
