@@ -45,6 +45,10 @@ impl Buffer {
         }
     }
 
+    pub fn from_vec(data: Vec<u8>) -> Self {
+        Buffer { inner: data }
+    }
+
     pub fn len(&self) -> usize {
         self.inner.len()
     }

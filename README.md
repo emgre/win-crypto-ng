@@ -40,6 +40,15 @@ Windows, you already accepted to trust these primitives.
 
 *More to come*
 
+## Cargo features
+
+- `zeroize` - Uses `zeroize` crate to zero intermediate buffers on destruction
+- `rand` - Implements `rand` crate traits for the CNG-provided CSPRNG
+  (cryptographically secure pseudorandom number generator)
+- `block-cipher` - Implements `block-cipher` traits for CNG block ciphers.
+
+By default, only the `zeroize` feature is enabled.
+
 ## Examples
 
 ### Asymmetric encryption (RSA)
