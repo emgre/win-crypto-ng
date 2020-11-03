@@ -809,9 +809,9 @@ mod block_cipher_trait {
     }
 
     use typenum::{IsEqual, IsGreaterOrEqual, IsLessOrEqual, PartialDiv};
-    use typenum::{B1, U1, U1024, U128, U16, U256, U64, U8};
-    use typenum::{U112, U168, U184, U56};
+    use typenum::{B1, U1, U128, U16, U192, U256, U64, U8};
 
+    // NOTE: These are values as supported by CNG (tested on Windows 10 2004).
     impl_block_cipher!(
         (Aes, block: U16, par: U1, KeyBits:
             // {128, 192, 256}
@@ -820,20 +820,20 @@ mod block_cipher_trait {
             PartialDiv<U64>
         ),
         (Rc2, block: U8, par: U1, KeyBits:
-            // {8, 16, .., 1024}
-            IsGreaterOrEqual<U8, Output = B1> +
-            IsLessOrEqual<U1024, Output = B1> +
+            // {16, 24, .., 128}
+            IsGreaterOrEqual<U16, Output = B1> +
+            IsLessOrEqual<U128, Output = B1> +
             PartialDiv<U8>
         ),
-        (Des, block: U8, par: U1, KeyBits: IsEqual<U56, Output = B1>),
-        (DesX, block: U8, par: U1, KeyBits: IsEqual<U184, Output = B1>),
-        (TripleDes, block: U8, par: U1, KeyBits:
-            // {112, 168}
-            IsGreaterOrEqual<U112, Output = B1> +
-            IsLessOrEqual<U168, Output = B1> +
-            PartialDiv<U56>
-        ),
-        (TripleDes112, block: U8, par: U1, KeyBits: IsEqual<U112, Output = B1>),
+        (Des, block: U8, par: U1, KeyBits: IsEqual<U64, Output = B1>),
+        (DesX, block: U8, par: U1, KeyBits: IsEqual<U192, Output = B1>),
+        (TripleDes, block: U8, par: U1, KeyBits: IsEqual<U192, Output = B1>),
+        (TripleDes112, block: U8, par: U1, KeyBits:
+            // {128, 192}
+            IsGreaterOrEqual<U128, Output = B1> +
+            IsLessOrEqual<U192, Output = B1> +
+            PartialDiv<U64>
+        )
     );
 }
 
@@ -993,14 +993,14 @@ mod tests {
             (Aes, key: 16),
             (Aes, key: 24),
             (Aes, key: 32),
-            (Rc2, key: 1),
+            (Rc2, key: 2),
             (Rc2, key: 8),
             (Rc2, key: 128),
-            (Des, key: 7),
-            (DesX, key: 23),
-            (TripleDes, key: 14),
-            (TripleDes, key: 21),
-            (TripleDes112, key: 14),
+            (Des, key: 8),
+            (DesX, key: 24),
+            (TripleDes, key: 24),
+            (TripleDes112, key: 16),
+            (TripleDes112, key: 24),
         );
     }
 
