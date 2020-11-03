@@ -1,6 +1,6 @@
 [package]
 name = "win-crypto-ng"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Émile Grégoire <eg@emilegregoire.ca>", "Igor Matuszewski <Xanewok@gmail.com>"]
 edition = "2018"
 description = "Safe bindings to Windows Cryptography API: Next Generation"
