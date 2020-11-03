@@ -178,6 +178,7 @@ impl Algorithm for SymmetricAlgorithmId {
 /// The advanced encryption standard symmetric encryption algorithm.
 ///
 /// Standard: FIPS 197
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct Aes;
 impl Algorithm for Aes {
     const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::Aes);
@@ -188,6 +189,7 @@ impl Algorithm for Aes {
 /// The data encryption standard symmetric encryption algorithm.
 ///
 /// Standard: FIPS 46-3, FIPS 81.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct Des;
 impl Algorithm for Des {
     const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::Des);
@@ -198,6 +200,7 @@ impl Algorithm for Des {
 /// The extended data encryption standard symmetric encryption algorithm.
 ///
 /// Standard: None.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct DesX;
 impl Algorithm for DesX {
     const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::DesX);
@@ -208,6 +211,7 @@ impl Algorithm for DesX {
 /// The RC2 block symmetric encryption algorithm.
 ///
 /// Standard: RFC 2268.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct Rc2;
 impl Algorithm for Rc2 {
     const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::Rc2);
@@ -218,6 +222,7 @@ impl Algorithm for Rc2 {
 /// The triple data encryption standard symmetric encryption algorithm.
 ///
 /// Standard: SP800-67, SP800-38A.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct TripleDes;
 impl Algorithm for TripleDes {
     const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::TripleDes);
@@ -228,6 +233,7 @@ impl Algorithm for TripleDes {
 /// The 112-bit triple data encryption standard symmetric encryption algorithm.
 ///
 /// Standard: SP800-67, SP800-38A.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct TripleDes112;
 impl Algorithm for TripleDes112 {
     const ID: Option<SymmetricAlgorithmId> = Some(SymmetricAlgorithmId::TripleDes112);
@@ -708,7 +714,7 @@ mod block_cipher_trait {
                 .expect("Key to always know its algorithm name");
             // Unfortunately Windows sometimes insists on returning concatenated
             // identifiers with \0 in between (so we decode it manually),
-            // for example: ChainingModeECB\u{0}ChainingModeCBC\u{0}".
+            // for example: "ChainingModeECB\u{0}ChainingModeCBC\u{0}".
             let mode: String = std::char::decode_utf16(name.iter().cloned())
                 .map(|c| c.unwrap_or(std::char::REPLACEMENT_CHARACTER))
                 .collect();
@@ -731,68 +737,104 @@ mod block_cipher_trait {
         const VALUE: Option<usize> = Some(Self::USIZE);
     }
 
-    impl<B: KeyBits> NewBlockCipher for BlockCipherKey<Aes, B>
-    where
-        B: typenum::Unsigned,
-        // Fancy way of allowing only {128, 192, 256}
-        B: typenum::IsGreaterOrEqual<typenum::U128, Output = typenum::B1>,
-        B: typenum::IsLessOrEqual<typenum::U256, Output = typenum::B1>,
-        B: typenum::PartialDiv<typenum::U64>,
-        // Help the trait solver see that it's also divisible by 8
-        B: typenum::PartialDiv<typenum::U8>,
-        <B as typenum::PartialDiv<typenum::U8>>::Output: ArrayLength<u8>,
-    {
-        /// Key size in bytes with which cipher guaranteed to be initialized.
-        type KeySize = <B as typenum::PartialDiv<typenum::U8>>::Output;
+    macro_rules! impl_block_cipher {
+        ($(
+            ($algo: ty, block: $block_size: ty, par: $par_blocks: ty, KeyBits: $($tt:tt)*)
+        ),* $(,)*
+        ) => {
+            $(
+            impl<B: KeyBits> NewBlockCipher for BlockCipherKey<$algo, B>
+            where
+                B: typenum::Unsigned,
+                // Fancy way of allowing only {128, 192, 256}
+                B: $($tt)*,
+                // Help the trait solver see that it's also divisible by 8
+                B: typenum::PartialDiv<typenum::U8>,
+                <B as typenum::PartialDiv<typenum::U8>>::Output: ArrayLength<u8>,
+            {
+                /// Key size in bytes with which cipher guaranteed to be initialized.
+                type KeySize = <B as typenum::PartialDiv<typenum::U8>>::Output;
 
-        /// Create new block cipher instance from key with fixed size.
-        fn new(key: &Key<Self>) -> Self {
-            // NOTE: We specifically use ECB chaining mode coupled with empty IV
-            // (in subsequent `{encrypt, decrypt}_block` impls) to provide a
-            // transparent block cipher provided by the CNG API.
-            let prov = SymmetricAlgorithm::open(Aes.id(), ChainingMode::Ecb).unwrap();
-            let key = prov.new_key(key).unwrap();
-            match super::Key::try_from(key) {
-                Ok(key) => Self {
-                    key,
-                    _algo: PhantomData,
-                    _bits: PhantomData,
-                },
-                Err(..) => panic!(),
+                /// Create new block cipher instance from key with fixed size.
+                fn new(key: &Key<Self>) -> Self {
+                    // NOTE: We specifically use ECB chaining mode coupled with empty IV
+                    // (in subsequent `{encrypt, decrypt}_block` impls) to provide a
+                    // transparent block cipher provided by the CNG API.
+                    let algo = <$algo>::default();
+                    let prov = SymmetricAlgorithm::open(algo.id(), ChainingMode::Ecb).unwrap();
+                    let key = prov.new_key(key).unwrap();
+                    match super::Key::try_from(key) {
+                        Ok(key) => Self {
+                            key,
+                            _algo: PhantomData,
+                            _bits: PhantomData,
+                        },
+                        Err(..) => panic!(),
+                    }
+                }
             }
+
+            impl<B: KeyBits> BlockCipher for BlockCipherKey<$algo, B> {
+                /// Size of the block in bytes
+                type BlockSize = $block_size;
+
+                /// Number of blocks which can be processed in parallel by
+                /// cipher implementation
+                type ParBlocks = $par_blocks;
+
+                /// Encrypt block in-place
+                fn encrypt_block(&self, block: &mut Block<Self>) {
+                    // NOTE: We check that chaining mode is already ECB in
+                    // either `NewBlockCipher` or `try_into_block_cipher`.
+                    // FIXME: Adapt the implementation to use the in-place one
+                    let key = self.key.as_ref();
+                    let buf = key.encrypt(None, block.as_slice(), None).unwrap();
+                    let mut buf = buf.into_inner();
+                    block[..].copy_from_slice(buf.as_mut_slice());
+                }
+
+                /// Decrypt block in-place
+                fn decrypt_block(&self, block: &mut Block<Self>) {
+                    // NOTE: We check that chaining mode is already ECB in
+                    // either `NewBlockCipher` or `try_into_block_cipher`.
+                    // FIXME: Adapt the implementation to use the in-place one
+                    let key = self.key.as_ref();
+                    let buf = key.decrypt(None, block.as_slice(), None).unwrap();
+                    let mut buf = buf.into_inner();
+                    block[..].copy_from_slice(buf.as_mut_slice());
+                }
+            }
+            )*
         }
     }
 
-    impl<B: KeyBits> BlockCipher for BlockCipherKey<Aes, B> {
-        /// Size of the block in bytes
-        type BlockSize = typenum::U16;
+    use typenum::{IsEqual, IsGreaterOrEqual, IsLessOrEqual, PartialDiv};
+    use typenum::{B1, U1, U1024, U128, U16, U256, U64, U8};
+    use typenum::{U112, U168, U184, U56};
 
-        /// Number of blocks which can be processed in parallel by
-        /// cipher implementation
-        type ParBlocks = typenum::U1;
-
-        /// Encrypt block in-place
-        fn encrypt_block(&self, block: &mut Block<Self>) {
-            // NOTE: We check that chaining mode is already ECB in
-            // either `NewBlockCipher` or `try_into_block_cipher`.
-            // FIXME: Adapt the implementation to use the in-place one
-            let key = self.key.as_ref();
-            let buf = key.encrypt(None, block.as_slice(), None).unwrap();
-            let mut buf = buf.into_inner();
-            block[..].copy_from_slice(buf.as_mut_slice());
-        }
-
-        /// Decrypt block in-place
-        fn decrypt_block(&self, block: &mut Block<Self>) {
-            // NOTE: We check that chaining mode is already ECB in
-            // either `NewBlockCipher` or `try_into_block_cipher`.
-            // FIXME: Adapt the implementation to use the in-place one
-            let key = self.key.as_ref();
-            let buf = key.decrypt(None, block.as_slice(), None).unwrap();
-            let mut buf = buf.into_inner();
-            block[..].copy_from_slice(buf.as_mut_slice());
-        }
-    }
+    impl_block_cipher!(
+        (Aes, block: U16, par: U1, KeyBits:
+            // {128, 192, 256}
+            IsGreaterOrEqual<U128, Output = B1> +
+            IsLessOrEqual<U256, Output = B1> +
+            PartialDiv<U64>
+        ),
+        (Rc2, block: U8, par: U1, KeyBits:
+            // {8, 16, .., 1024}
+            IsGreaterOrEqual<U8, Output = B1> +
+            IsLessOrEqual<U1024, Output = B1> +
+            PartialDiv<U8>
+        ),
+        (Des, block: U8, par: U1, KeyBits: IsEqual<U56, Output = B1>),
+        (DesX, block: U8, par: U1, KeyBits: IsEqual<U184, Output = B1>),
+        (TripleDes, block: U8, par: U1, KeyBits:
+            // {112, 168}
+            IsGreaterOrEqual<U112, Output = B1> +
+            IsLessOrEqual<U168, Output = B1> +
+            PartialDiv<U56>
+        ),
+        (TripleDes112, block: U8, par: U1, KeyBits: IsEqual<U112, Output = B1>),
+    );
 }
 
 #[cfg(test)]
@@ -919,18 +961,47 @@ mod tests {
     #[cfg(feature = "block-cipher")]
     #[test]
     fn cipher_trait() {
+        use block_cipher::generic_array::{typenum::Unsigned, GenericArray};
+        use block_cipher::BlockCipher;
         use core::convert::TryFrom;
 
-        let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Ecb).unwrap();
-        let key = algo.new_key(SECRET.as_bytes()).unwrap();
+        macro_rules! run_tests {
+            ($(($algo: ty, key: $key: literal)),* $(,)*) => {
+                $({
+                let algo = <$algo>::default();
+                let provider = SymmetricAlgorithm::open(algo.id(), ChainingMode::Ecb).unwrap();
+                let key: Vec<u8> = (0..$key).collect();
+                let key = provider.new_key(&key).unwrap();
 
-        let typed = Key::<Aes>::try_from(key).unwrap();
+                let typed = Key::<$algo>::try_from(key).unwrap();
 
-        let typed = typed.try_into_block_cipher().unwrap();
-        use block_cipher::{generic_array::GenericArray, BlockCipher};
-        let mut data = DATA.as_bytes()[..16].to_owned();
-        typed.encrypt_block(GenericArray::from_mut_slice(data.as_mut()));
-        typed.decrypt_block(GenericArray::from_mut_slice(data.as_mut()));
+                let typed = typed.try_into_block_cipher().unwrap();
+
+                let block_size = <BlockCipherKey<$algo, DynamicKeyBits> as BlockCipher>::BlockSize::USIZE;
+                let block_size = u8::try_from(block_size).unwrap();
+                let plaintext: Vec<u8> = (0..block_size).collect();
+                let mut data = plaintext.clone();
+                typed.encrypt_block(GenericArray::from_mut_slice(data.as_mut()));
+                assert_ne!(data, plaintext);
+                typed.decrypt_block(GenericArray::from_mut_slice(data.as_mut()));
+                assert_eq!(data, plaintext)
+                })*
+            };
+        }
+
+        run_tests!(
+            (Aes, key: 16),
+            (Aes, key: 24),
+            (Aes, key: 32),
+            (Rc2, key: 1),
+            (Rc2, key: 8),
+            (Rc2, key: 128),
+            (Des, key: 7),
+            (DesX, key: 23),
+            (TripleDes, key: 14),
+            (TripleDes, key: 21),
+            (TripleDes112, key: 14),
+        );
     }
 
     #[cfg(feature = "block-cipher")]
