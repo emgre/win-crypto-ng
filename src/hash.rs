@@ -383,6 +383,22 @@ impl Hash {
         }
     }
 
+    pub(crate) fn finish_in_place(self, out: &mut [u8]) -> Result<()> {
+        let hash_size = self.hash_size()?;
+        assert_eq!(out.len(), hash_size);
+
+        unsafe {
+            Error::check(BCryptFinishHash(
+                self.handle.as_ptr(),
+                out.as_mut_ptr(),
+                out.len() as ULONG,
+                0,
+            ))?;
+        }
+
+        Ok(())
+    }
+
     /// Get the final hash length, in bytes.
     ///
     /// # Examples
@@ -448,6 +464,80 @@ impl Clone for Hash {
 
         Self { handle, object }
     }
+}
+
+pub mod digest_trait {
+    use super::{Hash, HashAlgorithm, HashAlgorithmId};
+    use digest::generic_array::{typenum, ArrayLength, GenericArray};
+    use std::marker::PhantomData;
+
+    pub trait WinDigestAlgo: Clone {
+        type BlockSize: ArrayLength<u8>;
+        type OutputSize: ArrayLength<u8>;
+        fn algo_id() -> HashAlgorithmId;
+    }
+
+    #[derive(Clone)]
+    pub struct WinDigest<A> {
+        _algo: PhantomData<A>,
+        inner: Hash,
+    }
+
+    impl<A: WinDigestAlgo> digest::BlockInput for WinDigest<A> {
+        type BlockSize = A::BlockSize;
+    }
+
+    impl<A: WinDigestAlgo> Default for WinDigest<A> {
+        fn default() -> Self {
+            let algo = HashAlgorithm::open(A::algo_id()).unwrap();
+            Self {
+                _algo: PhantomData,
+                inner: algo.new_hash().unwrap(),
+            }
+        }
+    }
+
+    impl<A: WinDigestAlgo> digest::Update for WinDigest<A> {
+        fn update(&mut self, data: impl AsRef<[u8]>) {
+            self.inner.hash(data.as_ref()).unwrap();
+        }
+    }
+
+    impl<A: WinDigestAlgo> digest::FixedOutput for WinDigest<A> {
+        type OutputSize = A::OutputSize;
+
+        fn finalize_into(self, out: &mut GenericArray<u8, Self::OutputSize>) {
+            self.inner.finish_in_place(out).unwrap();
+        }
+        fn finalize_into_reset(&mut self, out: &mut GenericArray<u8, Self::OutputSize>) {
+            let mut new = Self::default();
+            std::mem::swap(self, &mut new);
+            new.inner.finish_in_place(out).unwrap();
+        }
+    }
+
+    impl<A: WinDigestAlgo> digest::Reset for WinDigest<A> {
+        fn reset(&mut self) {
+            let mut new = Self::default();
+            std::mem::swap(self, &mut new);
+        }
+    }
+
+    macro_rules! impl_win_digest {
+        ($name:ident, $block_size:ty, $output_size:ty, $algo:ident) => {
+            #[derive(Clone, Copy)]
+            pub struct $name;
+            impl WinDigestAlgo for $name {
+                type BlockSize = $block_size;
+                type OutputSize = $output_size;
+                fn algo_id() -> HashAlgorithmId {
+                    HashAlgorithmId::$algo
+                }
+            }
+        };
+    }
+    impl_win_digest!(Md5, typenum::U64, typenum::U16, Md5);
+    impl_win_digest!(Sha1, typenum::U64, typenum::U20, Sha1);
 }
 
 #[cfg(test)]
