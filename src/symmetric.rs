@@ -661,9 +661,9 @@ impl SymmetricAlgorithmKey {
 }
 
 #[cfg(feature = "block-cipher")]
-pub use block_cipher;
-#[cfg(feature = "block-cipher")]
 pub use block_cipher_trait::BlockCipherKey;
+#[cfg(feature = "block-cipher")]
+pub use cipher::block as block_cipher;
 #[cfg(feature = "block-cipher")]
 mod block_cipher_trait {
     use super::*;
