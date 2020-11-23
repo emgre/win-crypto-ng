@@ -99,7 +99,7 @@ pub unsafe trait KeyBlob: Sized {
     const VALID_MAGIC: &'static [ULONG];
 
     fn is_magic_valid(magic: ULONG) -> bool {
-        let accepts_all = Self::VALID_MAGIC == [];
+        let accepts_all = Self::VALID_MAGIC.is_empty();
         accepts_all || Self::VALID_MAGIC.iter().any(|&x| x == magic)
     }
 }
