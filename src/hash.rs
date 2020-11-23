@@ -288,6 +288,8 @@ struct HashHandle {
     handle: BCRYPT_HASH_HANDLE,
 }
 
+unsafe impl Send for HashHandle {}
+
 impl HashHandle {
     pub fn new() -> Self {
         Self { handle: null_mut() }

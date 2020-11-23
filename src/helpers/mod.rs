@@ -12,7 +12,7 @@ pub use blob::{Blob, BlobLayout};
 mod windows_string;
 pub use windows_string::WindowsString;
 
-pub trait Handle {
+pub trait Handle: Send {
     fn as_ptr(&self) -> BCRYPT_HANDLE;
     fn as_mut_ptr(&mut self) -> *mut BCRYPT_HANDLE;
 
@@ -99,6 +99,8 @@ pub struct AlgoHandle {
     handle: BCRYPT_ALG_HANDLE,
 }
 
+unsafe impl Send for AlgoHandle {}
+
 impl AlgoHandle {
     pub fn open(id: &str) -> Result<Self> {
         let mut handle = null_mut::<VOID>();
@@ -139,6 +141,8 @@ impl Handle for AlgoHandle {
 pub struct KeyHandle {
     pub(crate) handle: BCRYPT_KEY_HANDLE,
 }
+
+unsafe impl Send for KeyHandle {}
 
 impl KeyHandle {
     pub fn new() -> Self {
