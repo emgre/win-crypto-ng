@@ -175,3 +175,17 @@ impl Handle for KeyHandle {
         &mut self.handle
     }
 }
+
+#[cfg(test)]
+pub(crate) fn assert_send<T: Send>() {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn send() {
+        assert_send::<AlgoHandle>();
+        assert_send::<KeyHandle>();
+    }
+}
