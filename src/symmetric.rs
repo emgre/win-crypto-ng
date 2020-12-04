@@ -1038,4 +1038,13 @@ mod tests {
             panic!();
         }
     }
+
+    #[test]
+    fn send() {
+        use crate::helpers::assert_send;
+        assert_send::<SymmetricAlgorithm>();
+        assert_send::<SymmetricAlgorithmKey>();
+        assert_send::<Key<SymmetricAlgorithmId>>();
+        assert_send::<Key<Aes>>();
+    }
 }
