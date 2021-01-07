@@ -466,6 +466,7 @@ impl Clone for Hash {
     }
 }
 
+#[cfg(feature = "digest")]
 pub mod digest_trait {
     use super::{Hash, HashAlgorithm, HashAlgorithmId};
     use digest::generic_array::{typenum, ArrayLength, GenericArray};

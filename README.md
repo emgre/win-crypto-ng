@@ -46,6 +46,7 @@ Windows, you already accepted to trust these primitives.
 - `rand` - Implements `rand` crate traits for the CNG-provided CSPRNG
   (cryptographically secure pseudorandom number generator)
 - `block-cipher` - Implements `block-cipher` traits for CNG block ciphers.
+- `digest` - Implements `digest` traits for CNG hashing algorithms.
 
 By default, only the `zeroize` feature is enabled.
 
