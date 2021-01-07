@@ -1077,4 +1077,13 @@ mod tests {
         let decoded = key.decrypt(padding, ciphertext.as_ref()).unwrap();
         assert_eq!(plaintext, decoded.as_ref());
     }
+
+    #[test]
+    fn send() {
+        use crate::helpers::assert_send;
+        assert_send::<AsymmetricAlgorithm>();
+        assert_send::<AsymmetricKey>();
+        assert_send::<AsymmetricKey<Rsa, Private>>();
+        assert_send::<AsymmetricKey<Ecdh<Curve25519>, Private>>();
+    }
 }

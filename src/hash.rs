@@ -288,6 +288,8 @@ struct HashHandle {
     handle: BCRYPT_HASH_HANDLE,
 }
 
+unsafe impl Send for HashHandle {}
+
 impl HashHandle {
     pub fn new() -> Self {
         Self { handle: null_mut() }
@@ -744,5 +746,13 @@ mod tests {
 
         assert_eq!(hash_size, expected_hash.len());
         assert_eq!(result.as_slice(), expected_hash);
+    }
+
+    #[test]
+    fn send() {
+        use crate::helpers::assert_send;
+        assert_send::<HashHandle>();
+        assert_send::<Hash>();
+        assert_send::<HashAlgorithm<HashAlgorithmId>>();
     }
 }

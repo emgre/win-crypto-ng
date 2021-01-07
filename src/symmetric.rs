@@ -661,9 +661,9 @@ impl SymmetricAlgorithmKey {
 }
 
 #[cfg(feature = "block-cipher")]
-pub use block_cipher;
-#[cfg(feature = "block-cipher")]
 pub use block_cipher_trait::BlockCipherKey;
+#[cfg(feature = "block-cipher")]
+pub use cipher::block as block_cipher;
 #[cfg(feature = "block-cipher")]
 mod block_cipher_trait {
     use super::*;
@@ -1037,5 +1037,14 @@ mod tests {
         if let Err(..) = Key::<Aes, typenum::U256>::try_from(key) {
             panic!();
         }
+    }
+
+    #[test]
+    fn send() {
+        use crate::helpers::assert_send;
+        assert_send::<SymmetricAlgorithm>();
+        assert_send::<SymmetricAlgorithmKey>();
+        assert_send::<Key<SymmetricAlgorithmId>>();
+        assert_send::<Key<Aes>>();
     }
 }

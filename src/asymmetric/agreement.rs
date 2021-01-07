@@ -30,6 +30,8 @@ pub struct SecretHandle {
     handle: BCRYPT_SECRET_HANDLE,
 }
 
+unsafe impl Send for SecretHandle {}
+
 impl Drop for SecretHandle {
     fn drop(&mut self) {
         if !self.handle.is_null() {
