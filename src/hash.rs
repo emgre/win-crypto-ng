@@ -471,12 +471,14 @@ pub mod digest_trait {
     use digest::generic_array::{typenum, ArrayLength, GenericArray};
     use std::marker::PhantomData;
 
+    /// Helper trait for [`digest::Digest`] implementations.
     pub trait WinDigestAlgo: Clone {
         type BlockSize: ArrayLength<u8>;
         type OutputSize: ArrayLength<u8>;
         fn algo_id() -> HashAlgorithmId;
     }
 
+    /// Helper struct that implements [`digest::Digest`] trait.
     #[derive(Clone)]
     pub struct WinDigest<A> {
         _algo: PhantomData<A>,
@@ -536,8 +538,15 @@ pub mod digest_trait {
             }
         };
     }
+
+    impl_win_digest!(Md2, typenum::U16, typenum::U16, Md2);
+    impl_win_digest!(Md4, typenum::U64, typenum::U16, Md4);
     impl_win_digest!(Md5, typenum::U64, typenum::U16, Md5);
+
     impl_win_digest!(Sha1, typenum::U64, typenum::U20, Sha1);
+    impl_win_digest!(Sha256, typenum::U64, typenum::U32, Sha256);
+    impl_win_digest!(Sha384, typenum::U128, typenum::U48, Sha384);
+    impl_win_digest!(Sha512, typenum::U128, typenum::U64, Sha512);
 }
 
 #[cfg(test)]
