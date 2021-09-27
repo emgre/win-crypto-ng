@@ -1,4 +1,3 @@
-use doc_comment::doctest;
 use winapi::shared::ntdef::NTSTATUS;
 use winapi::shared::ntstatus;
 
@@ -16,7 +15,8 @@ pub mod symmetric;
 pub mod helpers;
 
 // Compile and test the README
-doctest!("../README.md");
+#[cfg(doctest)]
+doc_comment::doctest!("../README.md");
 
 /// Error type
 ///
@@ -71,9 +71,9 @@ impl Error {
     }
 }
 
-impl Into<NonZeroU32> for Error {
-    fn into(self) -> NonZeroU32 {
-        let code: i32 = match self {
+impl From<Error> for NonZeroU32 {
+    fn from(from: Error) -> NonZeroU32 {
+        let code: i32 = match from {
             Error::NotFound => ntstatus::STATUS_NOT_FOUND,
             Error::InvalidParameter => ntstatus::STATUS_INVALID_PARAMETER,
             Error::BufferTooSmall => ntstatus::STATUS_BUFFER_TOO_SMALL,

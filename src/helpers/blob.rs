@@ -32,10 +32,13 @@ impl<'a, T: BlobLayout> Blob<T> {
         // SAFETY: The only way to construct `Blob` is via
         // `Self::from_boxed`, which requires that the source reference is
         // aligned at least as `T::Header` and since `Blob` is
-        // `#[repr(C)]` (and so is `T::Header`, because it  implements `AsBytes`
+        // `#[repr(C)]` (and so is `T::Header`, because it implements `AsBytes`
         // which requires being `#[repr(C)]`), so the reference to its first
         // field will be aligned at least as `T::Header`.
-        unsafe { &self.0 }
+        #[allow(clippy::deref_addrof)]
+        unsafe {
+            &*std::ptr::addr_of!(self.0)
+        }
     }
 
     pub(crate) fn tail(&self) -> &[u8] {
@@ -131,11 +134,11 @@ macro_rules! blob {
                 let mut boxed = vec![0u8; header_len + tail_len].into_boxed_slice();
 
                 let header_bytes = $crate::helpers::AsBytes::as_bytes(header);
-                &mut boxed[..header_len].copy_from_slice(header_bytes);
+                boxed[..header_len].copy_from_slice(header_bytes);
                 let mut offset = header_len;
                 $(
                     let field_len = blob! { size: header, $($len)*};
-                    &mut boxed[offset..offset + field_len].copy_from_slice(tail.$field);
+                    boxed[offset..offset + field_len].copy_from_slice(tail.$field);
                     offset += field_len;
                 )*
 

@@ -124,7 +124,7 @@ union PaddingInfo<'a> {
 }
 
 impl SignaturePadding {
-    fn to_ffi_args<'a>(&self, out: &'a mut WindowsString) -> (PaddingInfo<'a>, u32) {
+    fn to_ffi_args(self, out: &mut WindowsString) -> (PaddingInfo<'_>, u32) {
         match self {
             SignaturePadding::Pkcs1(Pkcs1Padding { algorithm }) => {
                 *out = WindowsString::from(algorithm.to_str());
@@ -143,7 +143,7 @@ impl SignaturePadding {
                     PaddingInfo {
                         pss: BCRYPT_PSS_PADDING_INFO {
                             pszAlgId: out.as_ptr(),
-                            cbSalt: *salt,
+                            cbSalt: salt,
                         },
                     },
                     BCRYPT_PAD_PSS,

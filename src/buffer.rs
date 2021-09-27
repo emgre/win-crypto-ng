@@ -74,7 +74,7 @@ impl Buffer {
     }
 
     pub fn into_inner(mut self) -> Vec<u8> {
-        mem::replace(&mut self.inner, Vec::new())
+        mem::take(&mut self.inner)
     }
 }
 

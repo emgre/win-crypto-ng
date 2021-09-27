@@ -86,9 +86,9 @@ impl<'a> TryFrom<&'a str> for RandomAlgorithmId {
     }
 }
 
-impl Into<&'static str> for RandomAlgorithmId {
-    fn into(self) -> &'static str {
-        match self {
+impl From<RandomAlgorithmId> for &'static str {
+    fn from(from: RandomAlgorithmId) -> &'static str {
+        match from {
             RandomAlgorithmId::Rng => BCRYPT_RNG_ALGORITHM,
             RandomAlgorithmId::DualECRng => BCRYPT_RNG_DUAL_EC_ALGORITHM,
             RandomAlgorithmId::Fips186DsaRng => BCRYPT_RNG_FIPS186_DSA_ALGORITHM,

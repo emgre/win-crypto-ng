@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/win-crypto-ng.svg)](https://crates.io/crates/win-crypto-ng)
 [![docs.rs](https://docs.rs/win-crypto-ng/badge.svg)](https://docs.rs/crate/win-crypto-ng)
-![MSRV](https://img.shields.io/badge/rustc-1.37+-blue.svg)
+![MSRV](https://img.shields.io/badge/rustc-1.51+-blue.svg)
 [![Build status](https://github.com/emgre/win-crypto-ng/workflows/CI/badge.svg)](https://github.com/emgre/win-crypto-ng/actions)
 [![License](https://img.shields.io/github/license/emgre/win-crypto-ng)](https://github.com/emgre/win-crypto-ng/blob/master/LICENSE.md)
 
@@ -139,4 +139,4 @@ assert_ne!(&buffer, &[0u8; 32]);
 
 Licensed under the 3-Clause BSD License. See [LICENSE.md](LICENSE.md) for more details.
 
-Copyright (c) 2019-2020 Émile Grégoire. All rights reserved.
+Copyright (c) 2019-2021 Émile Grégoire. All rights reserved.

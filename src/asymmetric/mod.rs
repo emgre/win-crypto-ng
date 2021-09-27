@@ -304,9 +304,9 @@ impl AsymmetricKey<Rsa, Private> {
     /// Export the RSA key to "full" raw data format. Additionally includes
     /// coefficient and (private) exponents.
     pub fn export_full(&self) -> Result<Box<Blob<RsaKeyFullPrivateBlob>>> {
-        Ok(KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
+        KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
             .try_into()
-            .map_err(|_| crate::Error::BadData)?)
+            .map_err(|_| crate::Error::BadData)
     }
 }
 
@@ -783,7 +783,7 @@ pub trait Export<A: Algorithm, P: Parts>: Borrow<AsymmetricKey<A, P>> {
         let blob_type = self.blob_type();
 
         let blob = KeyPair::export(key.0.handle, blob_type)?;
-        Ok(blob.try_into().map_err(|_| crate::Error::BadData)?)
+        blob.try_into().map_err(|_| crate::Error::BadData)
     }
 }
 
