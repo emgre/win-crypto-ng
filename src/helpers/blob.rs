@@ -138,6 +138,7 @@ macro_rules! blob {
                 let mut offset = header_len;
                 $(
                     let field_len = blob! { size: header, $($len)*};
+                    assert_eq!(field_len, tail.$field.len(), "{}.{} field is {} byte(s) but the header expects {} byte(s)", stringify!($wrapper_ident), stringify!($field), tail.$field.len(), field_len);
                     boxed[offset..offset + field_len].copy_from_slice(tail.$field);
                     offset += field_len;
                 )*
