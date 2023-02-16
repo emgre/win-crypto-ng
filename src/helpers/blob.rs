@@ -4,6 +4,7 @@ use crate::helpers::{AsBytes, FromBytes};
 
 use core::alloc::Layout;
 use core::{mem, ptr, slice};
+use std::ptr::addr_of;
 
 /// C-compatible dynamic inline structure.
 ///
@@ -33,9 +34,11 @@ impl<'a, T: BlobLayout> Blob<T> {
         // `Self::from_boxed`, which requires that the source reference is
         // aligned at least as `T::Header` and since `Blob` is
         // `#[repr(C)]` (and so is `T::Header`, because it  implements `AsBytes`
-        // which requires being `#[repr(C)]`), so the reference to its first
-        // field will be aligned at least as `T::Header`.
-        unsafe { &self.0 }
+        // which requires being `#[repr(C)]`), so the pointer to its first
+        // field will be aligned at least as `T::Header`, and can be safely
+        // cast to a reference
+        let header_ptr = addr_of!(self.0);
+        unsafe { &*header_ptr }
     }
 
     pub(crate) fn tail(&self) -> &[u8] {
