@@ -71,9 +71,7 @@ unsafe impl<T: BlobLayout> FromBytes for Blob<T> {
     // Require that the allocation is at least as aligned as its header to
     // safely reference it as the first field. (despite
     // `Blob` being technically `#[repr(packed)]`)
-    unsafe fn min_layout() -> Layout {
-        Layout::new::<T::Header>()
-    }
+    const MIN_LAYOUT: Layout = Layout::new::<T::Header>();
 
     unsafe fn ptr_cast(source: *const [u8]) -> *const Self {
         assert_ne!(source as *const (), ptr::null());
