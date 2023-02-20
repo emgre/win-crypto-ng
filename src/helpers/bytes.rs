@@ -87,7 +87,7 @@ pub unsafe trait FromBytes {
     fn from_bytes(bytes: &[u8]) -> &Self {
         let min_layout = unsafe { Self::min_layout() };
         // Make sure the allocation meets the expected layout requirements
-        assert!(bytes.len() >= min_layout.size(), 0);
+        assert!(bytes.len() >= min_layout.size());
         assert_eq!(bytes.as_ptr() as usize % min_layout.align(), 0);
 
         let old_size = mem::size_of_val(bytes);
@@ -106,7 +106,7 @@ pub unsafe trait FromBytes {
     fn from_boxed(boxed: Box<[u8]>) -> Box<Self> {
         let min_layout = unsafe { Self::min_layout() };
         // Make sure the allocation meets the expected layout requirements
-        assert!(boxed.len() >= min_layout.size(), 0);
+        assert!(boxed.len() >= min_layout.size());
         assert_eq!(boxed.as_ptr() as usize % min_layout.align(), 0);
 
         let old_size = mem::size_of_val(boxed.as_ref());

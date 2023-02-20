@@ -2,7 +2,7 @@
 name = "win-crypto-ng"
 version = "0.4.0"
 authors = ["Émile Grégoire <eg@emilegregoire.ca>", "Igor Matuszewski <Xanewok@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "Safe bindings to Windows Cryptography API: Next Generation"
 repository = "https://github.com/emgre/win-crypto-ng"
 documentation = "https://docs.rs/crate/win-crypto-ng"
@@ -10,6 +10,7 @@ readme = "README.md"
 keywords = ["cng", "windows", "cryptoapi"]
 categories = ["api-bindings", "os::windows-apis", "cryptography"]
 license = "BSD-3-Clause"
+rust-version = "1.60"
 
 [badges]
 maintenance = { status = "experimental" }
