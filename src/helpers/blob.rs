@@ -134,11 +134,11 @@ macro_rules! blob {
                 let mut boxed = vec![0u8; header_len + tail_len].into_boxed_slice();
 
                 let header_bytes = $crate::helpers::AsBytes::as_bytes(header);
-                &mut boxed[..header_len].copy_from_slice(header_bytes);
+                boxed[..header_len].copy_from_slice(header_bytes);
                 let mut offset = header_len;
                 $(
                     let field_len = blob! { size: header, $($len)*};
-                    &mut boxed[offset..offset + field_len].copy_from_slice(tail.$field);
+                    boxed[offset..offset + field_len].copy_from_slice(tail.$field);
                     offset += field_len;
                 )*
 
