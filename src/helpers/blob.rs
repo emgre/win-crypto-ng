@@ -49,9 +49,6 @@ impl<'a, T: BlobLayout> Blob<T> {
         AsBytes::as_bytes(self)
     }
 
-    // False positive for arbitrary self type
-    // TODO: Remove once we bump MSRV to a newer clippy
-    #[allow(clippy::wrong_self_convention)]
     pub fn into_bytes(self: Box<Self>) -> Box<[u8]> {
         AsBytes::into_bytes(self)
     }
