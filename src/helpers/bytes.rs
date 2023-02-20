@@ -68,8 +68,8 @@ pub unsafe trait AsBytes {
 /// Marker trait for types that can be safely converted to bytes.
 pub unsafe trait FromBytes {
     /// Specified the minimum layout requirements for the allocation:
-    /// - is at least as big as `min_layout().size()`
-    /// - referenced/pointed data is at least as aligned as `min_layout().align()`
+    /// - is at least as big as `MIN_LAYOUT.size()`
+    /// - referenced/pointed data is at least as aligned as `MIN_LAYOUT.align()`
     ///
     /// For DSTs, final size should be exactly the same as the allocation's.
     ///
@@ -77,15 +77,14 @@ pub unsafe trait FromBytes {
     /// In Rust, it is considered [UB] for pointers/references/`Box<T>`es to
     /// be dangling, unaligned or pointing to invalid value.
     ///
-    /// The alignment check is done using `min_layout` and thus can cause UB if
+    /// The alignment check is done using `MIN_LAYOUT` and thus can cause UB if
     /// implemented incorrectly.
     ///
     /// [UB]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
-    // FIXME: Replace with a const once we bump MSRV
-    unsafe fn min_layout() -> Layout;
+    const MIN_LAYOUT: Layout;
 
     fn from_bytes(bytes: &[u8]) -> &Self {
-        let min_layout = unsafe { Self::min_layout() };
+        let min_layout = Self::MIN_LAYOUT;
         // Make sure the allocation meets the expected layout requirements
         assert!(bytes.len() >= min_layout.size());
         assert_eq!(bytes.as_ptr() as usize % min_layout.align(), 0);
@@ -104,7 +103,7 @@ pub unsafe trait FromBytes {
     }
 
     fn from_boxed(boxed: Box<[u8]>) -> Box<Self> {
-        let min_layout = unsafe { Self::min_layout() };
+        let min_layout = Self::MIN_LAYOUT;
         // Make sure the allocation meets the expected layout requirements
         assert!(boxed.len() >= min_layout.size());
         assert_eq!(boxed.as_ptr() as usize % min_layout.align(), 0);
@@ -129,20 +128,18 @@ pub unsafe trait FromBytes {
 }
 
 unsafe impl FromBytes for [u16] {
-    unsafe fn min_layout() -> Layout {
-        // Allow for empty slices but require correct alignment
-        Layout::from_size_align_unchecked(0, mem::align_of::<u16>())
-    }
+    // Allow for empty slices but require correct alignment
+    const MIN_LAYOUT: Layout =
+        unsafe { Layout::from_size_align_unchecked(0, mem::align_of::<u16>()) };
     unsafe fn ptr_cast(source: *const [u8]) -> *const Self {
         ptr_slice_cast(source)
     }
 }
 
 unsafe impl FromBytes for [u8] {
-    unsafe fn min_layout() -> Layout {
-        // Allow for empty slices but require correct alignment
-        Layout::from_size_align_unchecked(0, mem::align_of::<u8>())
-    }
+    // Allow for empty slices but require correct alignment
+    const MIN_LAYOUT: Layout =
+        unsafe { Layout::from_size_align_unchecked(0, mem::align_of::<u8>()) };
     unsafe fn ptr_cast(source: *const [u8]) -> *const [u8] {
         source
     }
@@ -167,9 +164,7 @@ unsafe impl<T> FromBytes for T
 where
     T: Pod,
 {
-    unsafe fn min_layout() -> Layout {
-        Layout::new::<Self>()
-    }
+    const MIN_LAYOUT: Layout = Layout::new::<Self>();
 
     unsafe fn ptr_cast(ptr: *const [u8]) -> *const Self {
         ptr_ref_cast(ptr as *const ())
