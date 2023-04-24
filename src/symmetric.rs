@@ -663,19 +663,18 @@ impl SymmetricAlgorithmKey {
 #[cfg(feature = "block-cipher")]
 pub use block_cipher_trait::BlockCipherKey;
 #[cfg(feature = "block-cipher")]
-pub use cipher::block as block_cipher;
-#[cfg(feature = "block-cipher")]
 mod block_cipher_trait {
     use super::*;
     use core::convert::TryFrom;
 
-    /// Helper struct that implements `block_cipher::BlockCipher` trait.
+    /// Helper struct that implements [`KeyInit`] + [`BlockCipher`] + [`BlockEncrypt`] + [`BlockDecrypt`] traits.
     ///
     /// Windows CNG API allows to create symmetric cipher keys with chaining
-    /// modes predefined. Because `BlockCipher` trait is only concerned with the
-    /// underlying cipher op (and which can be further used to compose chaining
-    /// mode on top of), we need to make sure that the inherent chaining mode is
-    /// set to ECB (which can be thought of as having no chaining mode).
+    /// modes predefined. Because `BlockEncrypt` and `BlockDecrypt` traits are
+    /// only concerned with the underlying cipher op (and which can be further
+    /// used to compose chaining mode on top of), we need to make sure that
+    /// the inherent chaining mode is set to ECB (which can be thought of as
+    /// having no chaining mode).
     pub struct BlockCipherKey<A: Algorithm, B: KeyBits> {
         key: super::Key<A, B>,
         _algo: PhantomData<A>,
@@ -699,13 +698,12 @@ mod block_cipher_trait {
     }
 
     impl<A: Algorithm, B: KeyBits> super::Key<A, B> {
-        /// Returns a helper type that implements [`block_cipher::BlockCipher`] trait.
+        /// Returns a helper type that implements [`KeyInit`] + [`BlockCipher`] + [`BlockEncrypt`] + [`BlockDecrypt`] traits.
         ///
         /// Returns `Ok` if and only if the underlying key is set to ECB
         /// chaining mode, see [`BlockCipherKey`] for more details.
         ///
         /// [`BlockCipherKey`]: struct.BlockCipherKey.html
-        /// [`block_cipher::BlockCipher`]: ../../block_cipher/trait.BlockCipher.html
         pub fn try_into_block_cipher(self) -> Result<BlockCipherKey<A, B>, Self> {
             let name = self
                 .inner
@@ -730,8 +728,12 @@ mod block_cipher_trait {
         }
     }
 
-    use block_cipher::generic_array::{typenum, ArrayLength};
-    use block_cipher::{self, Block, BlockCipher, Key, NewBlockCipher};
+    use cipher::generic_array::{typenum, ArrayLength};
+    use cipher::inout::InOut;
+    use cipher::{
+        Block, BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser,
+        Key, KeyInit, KeySizeUser, ParBlocksSizeUser,
+    };
 
     impl<T: typenum::Unsigned> KeyBits for T {
         const VALUE: Option<usize> = Some(Self::USIZE);
@@ -743,7 +745,7 @@ mod block_cipher_trait {
         ),* $(,)*
         ) => {
             $(
-            impl<B: KeyBits> NewBlockCipher for BlockCipherKey<$algo, B>
+            impl<B: KeyBits> KeySizeUser for BlockCipherKey<$algo, B>
             where
                 B: typenum::Unsigned,
                 // Fancy way of allowing only {128, 192, 256}
@@ -754,6 +756,12 @@ mod block_cipher_trait {
             {
                 /// Key size in bytes with which cipher guaranteed to be initialized.
                 type KeySize = <B as typenum::PartialDiv<typenum::U8>>::Output;
+            }
+
+            impl<B: KeyBits> KeyInit for BlockCipherKey<$algo, B>
+            where
+                Self: KeySizeUser
+            {
 
                 /// Create new block cipher instance from key with fixed size.
                 fn new(key: &Key<Self>) -> Self {
@@ -774,42 +782,76 @@ mod block_cipher_trait {
                 }
             }
 
-            impl<B: KeyBits> BlockCipher for BlockCipherKey<$algo, B> {
+            impl<B: KeyBits> BlockCipher for BlockCipherKey<$algo, B> {}
+
+            impl<B: KeyBits> BlockSizeUser for BlockCipherKey<$algo, B> {
                 /// Size of the block in bytes
                 type BlockSize = $block_size;
+            }
 
-                /// Number of blocks which can be processed in parallel by
-                /// cipher implementation
-                type ParBlocks = $par_blocks;
+            impl<B: KeyBits> ParBlocksSizeUser for BlockCipherKey<$algo, B> {
+                /// Number of blocks which can be processed in parallel.
+                type ParBlocksSize = $par_blocks;
+            }
 
-                /// Encrypt block in-place
-                fn encrypt_block(&self, block: &mut Block<Self>) {
-                    // NOTE: We check that chaining mode is already ECB in
-                    // either `NewBlockCipher` or `try_into_block_cipher`.
-                    // FIXME: Adapt the implementation to use the in-place one
-                    let key = self.key.as_ref();
-                    let buf = key.encrypt(None, block.as_slice(), None).unwrap();
-                    let mut buf = buf.into_inner();
-                    block[..].copy_from_slice(buf.as_mut_slice());
+            // BlockEncrypt and BlockDecrypt impls are manual expansions of the
+            // `cipher::impl_simple_block_encdec` macro. We cannot use the macro
+            // directly as it cannot parse the `$algo` token.
+            impl<B: KeyBits> BlockEncrypt for BlockCipherKey<$algo, B> {
+                fn encrypt_with_backend(&self, f: impl BlockClosure<BlockSize = $block_size>) {
+                    struct EncBack<'a, B: KeyBits>(&'a BlockCipherKey<$algo, B>);
+                    impl<'a, B: KeyBits> BlockSizeUser for EncBack<'a, B> {
+                        type BlockSize = $block_size;
+                    }
+                    impl<'a, B: KeyBits> ParBlocksSizeUser for EncBack<'a, B> {
+                        type ParBlocksSize = $par_blocks;
+                    }
+                    impl<'a, B: KeyBits> BlockBackend for EncBack<'a, B> {
+                        #[inline(always)]
+                        fn proc_block(&mut self, mut block: InOut<'_, '_, Block<Self>>) {
+                            // NOTE: We check that chaining mode is already ECB in
+                            // either `KeyInit` or `try_into_block_cipher`.
+                            // FIXME: Adapt the implementation to use the in-place one
+                            let key = self.0.key.as_ref();
+                            let buf = key.encrypt(None, block.get_in().as_slice(), None).unwrap();
+                            let mut buf = buf.into_inner();
+                            block.get_out()[..].copy_from_slice(buf.as_mut_slice());
+                        }
+                    }
+                    f.call(&mut EncBack(self))
                 }
+            }
 
-                /// Decrypt block in-place
-                fn decrypt_block(&self, block: &mut Block<Self>) {
-                    // NOTE: We check that chaining mode is already ECB in
-                    // either `NewBlockCipher` or `try_into_block_cipher`.
-                    // FIXME: Adapt the implementation to use the in-place one
-                    let key = self.key.as_ref();
-                    let buf = key.decrypt(None, block.as_slice(), None).unwrap();
-                    let mut buf = buf.into_inner();
-                    block[..].copy_from_slice(buf.as_mut_slice());
+            impl<B: KeyBits> BlockDecrypt for BlockCipherKey<$algo, B> {
+                fn decrypt_with_backend(&self, f: impl BlockClosure<BlockSize = $block_size>) {
+                    struct DecBack<'a, B: KeyBits>(&'a BlockCipherKey<$algo, B>);
+                    impl<'a, B: KeyBits> BlockSizeUser for DecBack<'a, B> {
+                        type BlockSize = $block_size;
+                    }
+                    impl<'a, B: KeyBits> ParBlocksSizeUser for DecBack<'a, B> {
+                        type ParBlocksSize = $par_blocks;
+                    }
+                    impl<'a, B: KeyBits> BlockBackend for DecBack<'a, B> {
+                        #[inline(always)]
+                        fn proc_block(&mut self, mut block: InOut<'_, '_, Block<Self>>) {
+                            // NOTE: We check that chaining mode is already ECB in
+                            // either `KeyInit` or `try_into_block_cipher`.
+                            // FIXME: Adapt the implementation to use the in-place one
+                            let key = self.0.key.as_ref();
+                            let buf = key.decrypt(None, block.get_in().as_slice(), None).unwrap();
+                            let mut buf = buf.into_inner();
+                            block.get_out()[..].copy_from_slice(buf.as_mut_slice());
+                        }
+                    }
+                    f.call(&mut DecBack(self))
                 }
             }
             )*
         }
     }
 
-    use typenum::{IsEqual, IsGreaterOrEqual, IsLessOrEqual, PartialDiv};
-    use typenum::{B1, U1, U128, U16, U192, U256, U64, U8};
+    use typenum::consts::{B1, U1, U128, U16, U192, U256, U64, U8};
+    use typenum::type_operators::{IsEqual, IsGreaterOrEqual, IsLessOrEqual, PartialDiv};
 
     // NOTE: These are values as supported by CNG (tested on Windows 10 2004).
     impl_block_cipher!(
@@ -951,8 +993,8 @@ mod tests {
 
     #[cfg(feature = "block-cipher")]
     fn _assert_aes_keysize_valid() {
-        use block_cipher::{generic_array::typenum, NewBlockCipher};
-        fn _assert_trait_impl<T: NewBlockCipher>() {}
+        use cipher::{generic_array::typenum, KeyInit};
+        fn _assert_trait_impl<T: KeyInit>() {}
         _assert_trait_impl::<BlockCipherKey<Aes, typenum::U128>>();
         _assert_trait_impl::<BlockCipherKey<Aes, typenum::U192>>();
         _assert_trait_impl::<BlockCipherKey<Aes, typenum::U256>>();
@@ -961,8 +1003,8 @@ mod tests {
     #[cfg(feature = "block-cipher")]
     #[test]
     fn cipher_trait() {
-        use block_cipher::generic_array::{typenum::Unsigned, GenericArray};
-        use block_cipher::BlockCipher;
+        use cipher::generic_array::{typenum::Unsigned, GenericArray};
+        use cipher::{BlockDecrypt, BlockEncrypt, BlockSizeUser};
         use core::convert::TryFrom;
 
         macro_rules! run_tests {
@@ -977,7 +1019,7 @@ mod tests {
 
                 let typed = typed.try_into_block_cipher().unwrap();
 
-                let block_size = <BlockCipherKey<$algo, DynamicKeyBits> as BlockCipher>::BlockSize::USIZE;
+                let block_size = <BlockCipherKey<$algo, DynamicKeyBits> as BlockSizeUser>::BlockSize::USIZE;
                 let block_size = u8::try_from(block_size).unwrap();
                 let plaintext: Vec<u8> = (0..block_size).collect();
                 let mut data = plaintext.clone();
@@ -1007,7 +1049,7 @@ mod tests {
     #[cfg(feature = "block-cipher")]
     #[test]
     fn marker_bits() {
-        use block_cipher::generic_array::typenum;
+        use cipher::generic_array::typenum;
         use core::convert::TryFrom;
 
         let algo = SymmetricAlgorithm::open(SymmetricAlgorithmId::Aes, ChainingMode::Ecb).unwrap();
