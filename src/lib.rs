@@ -1,4 +1,3 @@
-use doc_comment::doctest;
 use winapi::shared::ntdef::NTSTATUS;
 use winapi::shared::ntstatus;
 
@@ -16,7 +15,8 @@ pub mod symmetric;
 pub mod helpers;
 
 // Compile and test the README
-doctest!("../README.md");
+#[cfg(doctest)]
+doc_comment::doctest!("../README.md");
 
 /// Error type
 ///
