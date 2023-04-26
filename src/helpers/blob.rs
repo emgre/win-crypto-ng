@@ -22,8 +22,8 @@ use std::ptr::addr_of;
 #[repr(C, packed)]
 pub struct Blob<T: BlobLayout>(T::Header, [u8]);
 
-/// Marker trait for dynamic struct layouts prefixed with `Self::Header` type
-/// of a statically-known size. Used in tandem with `Blob`.
+/// Marker trait for dynamic struct layouts prefixed with [`Self::Header`] type
+/// of a statically-known size. Used in tandem with [`Blob`].
 pub trait BlobLayout {
     type Header: AsBytes + FromBytes;
 }
@@ -63,14 +63,14 @@ impl<'a, T: BlobLayout> Blob<T> {
 }
 
 // SAFETY: The struct is `#[repr(C)]` and so is the header because it implements
-// `AsBytes` as well, so the layout is well-defined and data can be converted to
+// [`AsBytes`] as well, so the layout is well-defined and data can be converted to
 // bytes
 unsafe impl<T: BlobLayout> AsBytes for Blob<T> {}
 
 unsafe impl<T: BlobLayout> FromBytes for Blob<T> {
     // Require that the allocation is at least as aligned as its header to
     // safely reference it as the first field. (despite
-    // `Blob` being technically `#[repr(packed)]`)
+    // [`Blob`] being technically `#[repr(packed)]`)
     const MIN_LAYOUT: Layout = Layout::new::<T::Header>();
 
     unsafe fn ptr_cast(source: *const [u8]) -> *const Self {
@@ -120,6 +120,12 @@ macro_rules! blob {
         }
 
         impl $crate::helpers::Blob<$wrapper_ident> {
+            /// Create a [`$wrapper_ident`] blob instance from its parts.
+            ///
+            /// SAFETY: The header might contain length information about the payload
+            /// (i.e. the `tail` argument). An mismatch between the two won't cause a
+            /// memory corruption, but it will panic. Careful validation of the
+            /// arguments must be done to ensure proper behaviour.
             #[allow(unused_assignments)]
             pub fn clone_from_parts(header: &$header, tail: &$tail_ident) -> Box<Self> {
                 let header_len = core::mem::size_of_val(header);

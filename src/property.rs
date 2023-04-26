@@ -149,10 +149,11 @@ impl Property for MessageBlockLength {
 /// **DWORD**. Currently, the hash and symmetric cipher algorithm providers use
 /// caller-allocated buffers to store their subobjects. For example, the hash
 /// provider requires you to allocate memory for the hash object obtained with
-/// the [BCryptCreateHash] function. This property provides the buffer size for a
+/// the [`BCryptCreateHash`] function. This property provides the buffer size for a
 /// provider's object so you can allocate memory for the object created by the
 /// provider.
-/// [BCryptCreateHash]: https://docs.microsoft.com/windows/desktop/api/Bcrypt/nf-bcrypt-bcryptcreatehash
+///
+/// [`BCryptCreateHash`]: <https://docs.microsoft.com/windows/desktop/api/Bcrypt/nf-bcrypt-bcryptcreatehash>
 pub enum ObjectLength {}
 impl Property for ObjectLength {
     const IDENTIFIER: &'static str = bcrypt::BCRYPT_OBJECT_LENGTH;
