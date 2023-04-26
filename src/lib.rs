@@ -71,9 +71,9 @@ impl Error {
     }
 }
 
-impl Into<NonZeroU32> for Error {
-    fn into(self) -> NonZeroU32 {
-        let code: i32 = match self {
+impl From<Error> for NonZeroU32 {
+    fn from(val: Error) -> Self {
+        let code: i32 = match val {
             Error::NotFound => ntstatus::STATUS_NOT_FOUND,
             Error::InvalidParameter => ntstatus::STATUS_INVALID_PARAMETER,
             Error::BufferTooSmall => ntstatus::STATUS_BUFFER_TOO_SMALL,
@@ -88,7 +88,7 @@ impl Into<NonZeroU32> for Error {
             Error::Unknown(value) => value,
         };
 
-        NonZeroU32::new(code.abs() as u32).expect("Error to not be STATUS_SUCCESS")
+        NonZeroU32::new(code.unsigned_abs()).expect("Error to not be STATUS_SUCCESS")
     }
 }
 

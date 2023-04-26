@@ -124,6 +124,7 @@ union PaddingInfo<'a> {
 }
 
 impl SignaturePadding {
+    #[allow(clippy::wrong_self_convention)]
     fn to_ffi_args<'a>(&self, out: &'a mut WindowsString) -> (PaddingInfo<'a>, u32) {
         match self {
             SignaturePadding::Pkcs1(Pkcs1Padding { algorithm }) => {
