@@ -28,7 +28,7 @@ pub trait BlobLayout {
     type Header: AsBytes + FromBytes;
 }
 
-impl<'a, T: BlobLayout> Blob<T> {
+impl<T: BlobLayout> Blob<T> {
     pub fn header(&self) -> &T::Header {
         // SAFETY: The only way to construct `Blob` is via
         // `Self::from_boxed`, which requires that the source reference is
@@ -76,7 +76,7 @@ unsafe impl<T: BlobLayout> FromBytes for Blob<T> {
     unsafe fn ptr_cast(source: *const [u8]) -> *const Self {
         assert_ne!(source as *const (), ptr::null());
         // SAFETY: [u8] is 1-byte aligned so no need to check before deref
-        let len = (&*source).len();
+        let len = (*source).len();
         let tail_len = len - mem::size_of::<T::Header>();
 
         // SAFETY: This assumes that the pointer to slices and slice-based DSTs

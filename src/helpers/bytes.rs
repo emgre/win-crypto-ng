@@ -27,7 +27,7 @@ pub(crate) fn ptr_ref_cast<T, U>(ptr: *const U) -> *const T {
 pub unsafe fn ptr_slice_cast<T>(ptr: *const [u8]) -> *const [T] {
     assert_ne!(ptr as *const (), ptr::null());
     // SAFETY: [u8] is 1-byte aligned so no need to check that before deref
-    let len = (&*ptr).len();
+    let len = (*ptr).len();
 
     let new_len = len * mem::size_of::<u8>() / mem::size_of::<T>();
 

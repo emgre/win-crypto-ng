@@ -304,9 +304,9 @@ impl AsymmetricKey<Rsa, Private> {
     /// Export the RSA key to "full" raw data format. Additionally includes
     /// coefficient and (private) exponents.
     pub fn export_full(&self) -> Result<Box<Blob<RsaKeyFullPrivateBlob>>> {
-        Ok(KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
+        KeyPair::export(self.0.handle, BlobType::RsaFullPrivate)?
             .try_into()
-            .map_err(|_| crate::Error::BadData)?)
+            .map_err(|_| crate::Error::BadData)
     }
 }
 
@@ -365,7 +365,7 @@ impl AsymmetricKey<Rsa, Private> {
         parts: &RsaKeyPrivatePayload,
     ) -> Result<Self> {
         let key_bits = parts.modulus.len() * 8;
-        if key_bits % 64 != 0 || key_bits < 512 || key_bits > 16384 {
+        if key_bits % 64 != 0 || !(512..=16384).contains(&key_bits) {
             return Err(crate::Error::InvalidParameter);
         }
 
@@ -389,7 +389,7 @@ impl AsymmetricKey<Rsa, Public> {
         parts: &RsaKeyPublicPayload,
     ) -> Result<Self> {
         let key_bits = parts.modulus.len() * 8;
-        if key_bits % 64 != 0 || key_bits < 512 || key_bits > 16384 {
+        if key_bits % 64 != 0 || !(512..=16384).contains(&key_bits) {
             return Err(crate::Error::InvalidParameter);
         }
 
@@ -783,7 +783,7 @@ pub trait Export<A: Algorithm, P: Parts>: Borrow<AsymmetricKey<A, P>> {
         let blob_type = self.blob_type();
 
         let blob = KeyPair::export(key.0.handle, blob_type)?;
-        Ok(blob.try_into().map_err(|_| crate::Error::BadData)?)
+        blob.try_into().map_err(|_| crate::Error::BadData)
     }
 }
 
@@ -835,7 +835,7 @@ pub enum DsaPublicBlob {
     V2(Box<Blob<DsaKeyPublicV2Blob>>),
 }
 
-impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPublicBlob {
+impl AsRef<Blob<ErasedKeyBlob>> for DsaPublicBlob {
     fn as_ref(&self) -> &Blob<ErasedKeyBlob> {
         match self {
             DsaPublicBlob::V1(v1) => v1.as_erased(),
@@ -852,7 +852,7 @@ pub enum DsaPrivateBlob {
     V2(Box<Blob<DsaKeyPrivateV2Blob>>),
 }
 
-impl<'a> AsRef<Blob<ErasedKeyBlob>> for DsaPrivateBlob {
+impl AsRef<Blob<ErasedKeyBlob>> for DsaPrivateBlob {
     fn as_ref(&self) -> &Blob<ErasedKeyBlob> {
         match self {
             DsaPrivateBlob::V1(v1) => v1.as_erased(),
@@ -885,7 +885,7 @@ struct OaepPaddingInfo<'a> {
 }
 
 impl OaepPadding {
-    fn to_ffi_args<'a>(&self, out: &'a mut WindowsString) -> OaepPaddingInfo {
+    fn to_ffi_args(&self, out: &mut WindowsString) -> OaepPaddingInfo {
         *out = WindowsString::from(self.algorithm.to_str());
         OaepPaddingInfo {
             _borrowed: self,

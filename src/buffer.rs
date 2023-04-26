@@ -1,7 +1,6 @@
 //! Secure buffer implementation
 
 use std::fmt::{Debug, Error, Formatter};
-use std::mem;
 
 /// Secure buffer implementation.
 ///
@@ -74,7 +73,7 @@ impl Buffer {
     }
 
     pub fn into_inner(mut self) -> Vec<u8> {
-        mem::replace(&mut self.inner, Vec::new())
+        std::mem::take(&mut self.inner)
     }
 }
 
